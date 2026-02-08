@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
-from repo_mcp.security import PathBlockedError
+from repo_mcp.security import PathBlockedError, PolicyBlockedError, SecurityLimits
 from repo_mcp.tools.builtin import register_builtin_tools
 from repo_mcp.tools.registry import ToolDispatchError, ToolRegistry
 
@@ -34,10 +34,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
 class StdioServer:
     """Minimal deterministic STDIO server for tool routing."""
 
-    def __init__(self, repo_root: Path) -> None:
+    def __init__(self, repo_root: Path, limits: SecurityLimits | None = None) -> None:
         self._repo_root = repo_root
+        self._limits = limits or SecurityLimits()
         self._registry = ToolRegistry()
-        register_builtin_tools(self._registry, repo_root=repo_root)
+        register_builtin_tools(self._registry, repo_root=repo_root, limits=self._limits)
         self._fallback_request_counter = 0
 
     def serve(self, in_stream: TextIO, out_stream: TextIO) -> None:
@@ -100,6 +101,12 @@ class StdioServer:
                 reason=error.reason,
                 hint=error.hint,
             )
+        except PolicyBlockedError as error:
+            return self.blocked_response(
+                request_id=request.request_id,
+                reason=error.reason,
+                hint=error.hint,
+            )
         except ToolDispatchError as error:
             return self.error_response(
                 request_id=request.request_id,
@@ -113,7 +120,8 @@ class StdioServer:
                 message="Unhandled server error while executing tool.",
             )
 
-        return self.success_response(request_id=request.request_id, result=result)
+        response = self.success_response(request_id=request.request_id, result=result)
+        return self.enforce_response_size_limit(request_id=request.request_id, response=response)
 
     def parse_request(self, payload: object) -> Request | dict[str, object]:
         """Validate request payload and return normalized Request."""
@@ -191,10 +199,25 @@ class StdioServer:
             "error": {"code": "PATH_BLOCKED", "message": reason},
         }
 
+    def enforce_response_size_limit(
+        self,
+        request_id: str,
+        response: dict[str, object],
+    ) -> dict[str, object]:
+        """Block responses that exceed max_total_bytes_per_response."""
+        response_bytes = len(json.dumps(response, sort_keys=True).encode("utf-8"))
+        if response_bytes <= self._limits.max_total_bytes_per_response:
+            return response
+        return self.blocked_response(
+            request_id=request_id,
+            reason="Response exceeds max_total_bytes_per_response limit.",
+            hint="Request fewer lines or lower result volume.",
+        )
 
-def create_server(repo_root: str) -> StdioServer:
+
+def create_server(repo_root: str, limits: SecurityLimits | None = None) -> StdioServer:
     """Create a configured STDIO server instance."""
-    return StdioServer(repo_root=Path(repo_root).resolve())
+    return StdioServer(repo_root=Path(repo_root).resolve(), limits=limits)
 
 
 def main(argv: list[str] | None = None) -> int:
