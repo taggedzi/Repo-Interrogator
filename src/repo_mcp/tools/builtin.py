@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from repo_mcp.config import ServerConfig
+from repo_mcp.index import DEFAULT_CHUNK_LINES, DEFAULT_CHUNK_OVERLAP_LINES
 from repo_mcp.security import (
     PolicyBlockedError,
     SecurityLimits,
@@ -48,6 +49,11 @@ def _status_handler(repo_root: Path, limits: SecurityLimits, config: ServerConfi
                 "max_open_lines": limits.max_open_lines,
                 "max_total_bytes_per_response": limits.max_total_bytes_per_response,
                 "max_search_hits": limits.max_search_hits,
+            },
+            "chunking_summary": {
+                "chunk_lines": DEFAULT_CHUNK_LINES,
+                "overlap_lines": DEFAULT_CHUNK_OVERLAP_LINES,
+                "indexed_chunk_count": 0,
             },
             "effective_config": config.to_public_dict(),
         }

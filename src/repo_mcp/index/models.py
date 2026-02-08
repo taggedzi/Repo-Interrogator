@@ -23,3 +23,13 @@ class IndexDelta:
     updated: tuple[str, ...]
     unchanged: tuple[str, ...]
     removed: tuple[str, ...]
+
+
+@dataclass(slots=True, frozen=True)
+class ChunkRecord:
+    """Deterministic chunk metadata."""
+
+    path: str
+    start_line: int
+    end_line: int
+    chunk_id: str
