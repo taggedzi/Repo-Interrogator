@@ -9,6 +9,7 @@ from .chunking import (
 from .discovery import detect_index_delta, discover_files, record_map
 from .manager import INDEX_SCHEMA_VERSION, IndexManager, IndexSchemaUnsupportedError, IndexStatus
 from .models import ChunkRecord, FileRecord, IndexDelta
+from .search import bm25_search, tokenize
 
 __all__ = [
     "ChunkRecord",
@@ -25,4 +26,6 @@ __all__ = [
     "detect_index_delta",
     "discover_files",
     "record_map",
+    "bm25_search",
+    "tokenize",
 ]

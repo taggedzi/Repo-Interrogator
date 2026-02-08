@@ -66,6 +66,7 @@ class StdioServer:
             read_audit_entries=self._audit_logger.read,
             refresh_index=self._index_manager.refresh,
             read_index_status=self._index_manager.status,
+            search_index=self._index_manager.search,
             config=self._config,
         )
         self._fallback_request_counter = 0

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import time
 from dataclasses import asdict, dataclass
@@ -12,6 +13,7 @@ from repo_mcp.config import IndexConfig
 from repo_mcp.index.chunking import chunk_text
 from repo_mcp.index.discovery import detect_index_delta, discover_files
 from repo_mcp.index.models import ChunkRecord, FileRecord
+from repo_mcp.index.search import SearchDocument, bm25_search
 
 INDEX_SCHEMA_VERSION = 1
 
@@ -118,6 +120,44 @@ class IndexManager:
             "timestamp": timestamp,
         }
 
+    def search(
+        self,
+        query: str,
+        top_k: int,
+        file_glob: str | None = None,
+        path_prefix: str | None = None,
+    ) -> list[dict[str, object]]:
+        """Run deterministic BM25 search over indexed chunks."""
+        if top_k < 1:
+            return []
+        chunks = self._load_chunks()
+        filtered = self._filter_chunks(chunks, file_glob=file_glob, path_prefix=path_prefix)
+        if not filtered:
+            return []
+
+        line_cache: dict[str, list[str]] = {}
+        docs: list[SearchDocument] = []
+        for chunk in filtered:
+            lines = line_cache.get(chunk.path)
+            if lines is None:
+                path = self._repo_root / chunk.path
+                if not path.exists() or not path.is_file():
+                    continue
+                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+                line_cache[chunk.path] = lines
+            start_idx = max(0, chunk.start_line - 1)
+            end_idx = min(len(lines), chunk.end_line)
+            text = "\n".join(lines[start_idx:end_idx])
+            docs.append(
+                SearchDocument(
+                    path=chunk.path,
+                    start_line=chunk.start_line,
+                    end_line=chunk.end_line,
+                    text=text,
+                )
+            )
+        return bm25_search(documents=docs, query=query, top_k=top_k)
+
     def _build_chunks(self, records: list[FileRecord]) -> list[ChunkRecord]:
         chunks: list[ChunkRecord] = []
         for record in records:
@@ -126,6 +166,59 @@ class IndexManager:
             chunks.extend(chunk_text(path=record.path, text=text))
         chunks.sort(key=lambda item: (item.path, item.start_line))
         return chunks
+
+    def _load_chunks(self) -> list[ChunkRecord]:
+        manifest = self._read_manifest()
+        if manifest is None:
+            return []
+        schema = manifest.get("schema_version")
+        if not isinstance(schema, int):
+            raise IndexSchemaUnsupportedError(found=-1, expected=INDEX_SCHEMA_VERSION)
+        if schema != INDEX_SCHEMA_VERSION:
+            raise IndexSchemaUnsupportedError(found=schema, expected=INDEX_SCHEMA_VERSION)
+        if not self._chunks_path.exists():
+            return []
+
+        chunks: list[ChunkRecord] = []
+        for obj in self._read_jsonl(self._chunks_path):
+            path = obj.get("path")
+            start_line = obj.get("start_line")
+            end_line = obj.get("end_line")
+            chunk_id = obj.get("chunk_id")
+            if not isinstance(path, str):
+                continue
+            if not isinstance(start_line, int):
+                continue
+            if not isinstance(end_line, int):
+                continue
+            if not isinstance(chunk_id, str):
+                continue
+            chunks.append(
+                ChunkRecord(
+                    path=path,
+                    start_line=start_line,
+                    end_line=end_line,
+                    chunk_id=chunk_id,
+                )
+            )
+        chunks.sort(key=lambda item: (item.path, item.start_line))
+        return chunks
+
+    @staticmethod
+    def _filter_chunks(
+        chunks: list[ChunkRecord],
+        file_glob: str | None,
+        path_prefix: str | None,
+    ) -> list[ChunkRecord]:
+        output: list[ChunkRecord] = []
+        normalized_prefix = path_prefix.replace("\\", "/") if isinstance(path_prefix, str) else None
+        for chunk in chunks:
+            if file_glob is not None and not fnmatch.fnmatch(chunk.path, file_glob):
+                continue
+            if normalized_prefix is not None and not chunk.path.startswith(normalized_prefix):
+                continue
+            output.append(chunk)
+        return output
 
     def _filter_internal_records(self, records: list[FileRecord]) -> list[FileRecord]:
         if self._data_dir_prefix is None:

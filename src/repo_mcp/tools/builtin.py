@@ -18,7 +18,7 @@ from repo_mcp.security import (
     enforce_open_line_limits,
     resolve_repo_path,
 )
-from repo_mcp.tools.registry import ToolHandler, ToolRegistry
+from repo_mcp.tools.registry import ToolDispatchError, ToolHandler, ToolRegistry
 
 
 def register_builtin_tools(
@@ -28,6 +28,7 @@ def register_builtin_tools(
     read_audit_entries: Callable[[str | None, int], list[dict[str, object]]],
     refresh_index: Callable[[bool], dict[str, object]],
     read_index_status: Callable[[], IndexStatus],
+    search_index: Callable[[str, int, str | None, str | None], list[dict[str, object]]],
     config: ServerConfig,
 ) -> None:
     """Register the minimum v1 tool set with deterministic stub behavior."""
@@ -37,7 +38,7 @@ def register_builtin_tools(
     )
     registry.register("repo.list_files", _list_files_handler)
     registry.register("repo.open_file", _open_file_handler(repo_root, limits))
-    registry.register("repo.search", _search_handler(limits))
+    registry.register("repo.search", _search_handler(limits, search_index))
     registry.register("repo.refresh_index", _refresh_index_handler(refresh_index))
     registry.register("repo.audit_log", _audit_log_handler(limits, read_audit_entries))
 
@@ -117,15 +118,53 @@ def _open_file_handler(repo_root: Path, limits: SecurityLimits) -> ToolHandler:
     return handler
 
 
-def _search_handler(limits: SecurityLimits) -> ToolHandler:
+def _search_handler(
+    limits: SecurityLimits,
+    search_index: Callable[[str, int, str | None, str | None], list[dict[str, object]]],
+) -> ToolHandler:
     def handler(arguments: dict[str, object]) -> dict[str, object]:
+        mode_value = arguments.get("mode", "bm25")
+        if not isinstance(mode_value, str):
+            raise ToolDispatchError(
+                code="INVALID_PARAMS", message="repo.search mode must be a string."
+            )
+        if mode_value != "bm25":
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.search mode must be 'bm25' in v1.",
+            )
+        query_value = arguments.get("query")
+        if not isinstance(query_value, str) or not query_value.strip():
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.search query must be a non-empty string.",
+            )
+
         top_k_value = arguments.get("top_k", limits.max_search_hits)
         if isinstance(top_k_value, int) and top_k_value > limits.max_search_hits:
             raise PolicyBlockedError(
                 reason="Requested top_k exceeds max_search_hits limit.",
                 hint="Reduce top_k or adjust the configured search limit.",
             )
-        return {"hits": []}
+        if not isinstance(top_k_value, int):
+            top_k_value = limits.max_search_hits
+        if top_k_value < 1:
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.search top_k must be >= 1.",
+            )
+
+        file_glob_value = arguments.get("file_glob")
+        file_glob = file_glob_value if isinstance(file_glob_value, str) else None
+        path_prefix_value = arguments.get("path_prefix")
+        path_prefix = path_prefix_value if isinstance(path_prefix_value, str) else None
+        hits = search_index(
+            query_value,
+            top_k_value,
+            file_glob,
+            path_prefix,
+        )
+        return {"hits": hits}
 
     return handler
 
