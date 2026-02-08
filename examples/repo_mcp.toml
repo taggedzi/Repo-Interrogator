@@ -1,4 +1,10 @@
 # Example repository-level configuration for Repo Interrogator.
+# You may lower limits or raise them only within hard caps:
+# max_file_bytes <= 4194304
+# max_open_lines <= 2000
+# max_total_bytes_per_response <= 1048576
+# max_search_hits <= 200
+# Denylist relaxation is not supported in v1.
 
 [limits]
 max_file_bytes = 1048576
@@ -12,4 +18,3 @@ exclude_globs = ["**/.git/**", "**/__pycache__/**", "**/.venv/**"]
 
 [adapters]
 python_enabled = true
-

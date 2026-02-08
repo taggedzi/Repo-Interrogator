@@ -8,6 +8,11 @@ from pathlib import Path
 
 from repo_mcp.security import SecurityLimits
 
+MAX_FILE_BYTES_CAP = 4 * 1024 * 1024
+MAX_OPEN_LINES_CAP = 2_000
+MAX_TOTAL_BYTES_PER_RESPONSE_CAP = 1024 * 1024
+MAX_SEARCH_HITS_CAP = 200
+
 DEFAULT_INCLUDE_EXTENSIONS = (
     ".py",
     ".md",
@@ -132,26 +137,47 @@ def merge_config(
     limits_payload = _get_table(repo_payload, "limits")
     index_payload = _get_table(repo_payload, "index")
     adapters_payload = _get_table(repo_payload, "adapters")
+    security_payload = _get_table(repo_payload, "security")
 
-    max_file_bytes = _optional_positive_int(
+    if "denylist_override" in security_payload:
+        raise ValueError(
+            "Config field 'security.denylist_override' is not supported in v1; "
+            "default denylist cannot be relaxed."
+        )
+    if "denylist_allowlist" in security_payload:
+        raise ValueError(
+            "Config field 'security.denylist_allowlist' is not supported in v1; "
+            "default denylist cannot be relaxed."
+        )
+    if "denylist_relax" in security_payload:
+        raise ValueError(
+            "Config field 'security.denylist_relax' is not supported in v1; "
+            "default denylist cannot be relaxed."
+        )
+
+    max_file_bytes = _optional_positive_int_with_cap(
         limits_payload.get("max_file_bytes"),
         "limits.max_file_bytes",
         base.limits.max_file_bytes,
+        MAX_FILE_BYTES_CAP,
     )
-    max_open_lines = _optional_positive_int(
+    max_open_lines = _optional_positive_int_with_cap(
         limits_payload.get("max_open_lines"),
         "limits.max_open_lines",
         base.limits.max_open_lines,
+        MAX_OPEN_LINES_CAP,
     )
-    max_total_bytes_per_response = _optional_positive_int(
+    max_total_bytes_per_response = _optional_positive_int_with_cap(
         limits_payload.get("max_total_bytes_per_response"),
         "limits.max_total_bytes_per_response",
         base.limits.max_total_bytes_per_response,
+        MAX_TOTAL_BYTES_PER_RESPONSE_CAP,
     )
-    max_search_hits = _optional_positive_int(
+    max_search_hits = _optional_positive_int_with_cap(
         limits_payload.get("max_search_hits"),
         "limits.max_search_hits",
         base.limits.max_search_hits,
+        MAX_SEARCH_HITS_CAP,
     )
 
     include_extensions = base.index.include_extensions
@@ -190,13 +216,36 @@ def merge_config(
 
 def apply_cli_overrides(config: ServerConfig, overrides: CliOverrides) -> ServerConfig:
     """Apply startup overrides at highest precedence."""
+    max_file_bytes = _optional_positive_int_with_cap(
+        overrides.max_file_bytes,
+        "overrides.max_file_bytes",
+        config.limits.max_file_bytes,
+        MAX_FILE_BYTES_CAP,
+    )
+    max_open_lines = _optional_positive_int_with_cap(
+        overrides.max_open_lines,
+        "overrides.max_open_lines",
+        config.limits.max_open_lines,
+        MAX_OPEN_LINES_CAP,
+    )
+    max_total_bytes_per_response = _optional_positive_int_with_cap(
+        overrides.max_total_bytes_per_response,
+        "overrides.max_total_bytes_per_response",
+        config.limits.max_total_bytes_per_response,
+        MAX_TOTAL_BYTES_PER_RESPONSE_CAP,
+    )
+    max_search_hits = _optional_positive_int_with_cap(
+        overrides.max_search_hits,
+        "overrides.max_search_hits",
+        config.limits.max_search_hits,
+        MAX_SEARCH_HITS_CAP,
+    )
+
     limits = SecurityLimits(
-        max_file_bytes=overrides.max_file_bytes or config.limits.max_file_bytes,
-        max_open_lines=overrides.max_open_lines or config.limits.max_open_lines,
-        max_total_bytes_per_response=(
-            overrides.max_total_bytes_per_response or config.limits.max_total_bytes_per_response
-        ),
-        max_search_hits=overrides.max_search_hits or config.limits.max_search_hits,
+        max_file_bytes=max_file_bytes,
+        max_open_lines=max_open_lines,
+        max_total_bytes_per_response=max_total_bytes_per_response,
+        max_search_hits=max_search_hits,
     )
     adapters = AdaptersConfig(
         python_enabled=(
@@ -224,8 +273,19 @@ def load_effective_config(repo_root: Path, overrides: CliOverrides | None = None
 
 
 def _optional_positive_int(value: object, name: str, default: int) -> int:
+    return _optional_positive_int_with_cap(value, name, default, cap=None)
+
+
+def _optional_positive_int_with_cap(
+    value: object,
+    name: str,
+    default: int,
+    cap: int | None,
+) -> int:
     if value is None:
         return default
     if not isinstance(value, int) or value < 1:
         raise ValueError(f"Config field '{name}' must be a positive integer.")
+    if cap is not None and value > cap:
+        raise ValueError(f"Config field '{name}' must be <= {cap}.")
     return value

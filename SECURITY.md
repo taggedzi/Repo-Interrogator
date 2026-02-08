@@ -22,4 +22,5 @@ Do not include secrets in reports.
 - Sensitive files are denylisted by default.
 - Blocking is preferred over redaction.
 - Audit logs are structured and must never include secrets or full file contents.
-
+- The default denylist cannot be relaxed by repo config in v1.
+- Limit overrides are bounded by hard security caps.
