@@ -9,8 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
+from repo_mcp.config import CliOverrides, ServerConfig, load_effective_config
 from repo_mcp.logging import AuditEvent, JsonlAuditLogger, sanitize_arguments, utc_timestamp
-from repo_mcp.security import PathBlockedError, PolicyBlockedError, SecurityLimits
+from repo_mcp.security import PathBlockedError, PolicyBlockedError
 from repo_mcp.tools.builtin import register_builtin_tools
 from repo_mcp.tools.registry import ToolDispatchError, ToolRegistry
 
@@ -29,6 +30,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="repo-mcp")
     parser.add_argument("--repo-root", required=False, default=".")
     parser.add_argument("--data-dir", required=False, default=None)
+    parser.add_argument("--max-file-bytes", type=int, required=False, default=None)
+    parser.add_argument("--max-open-lines", type=int, required=False, default=None)
+    parser.add_argument("--max-total-bytes-per-response", type=int, required=False, default=None)
+    parser.add_argument("--max-search-hits", type=int, required=False, default=None)
+    parser.add_argument(
+        "--python-adapter-enabled", choices=("true", "false"), required=False, default=None
+    )
     return parser
 
 
@@ -37,20 +45,20 @@ class StdioServer:
 
     def __init__(
         self,
-        repo_root: Path,
-        limits: SecurityLimits | None = None,
-        data_dir: Path | None = None,
+        config: ServerConfig,
     ) -> None:
-        self._repo_root = repo_root
-        self._limits = limits or SecurityLimits()
-        self._data_dir = data_dir or (repo_root / ".repo_mcp")
+        self._repo_root = config.repo_root
+        self._limits = config.limits
+        self._data_dir = config.data_dir
+        self._config = config
         self._audit_logger = JsonlAuditLogger(path=self._data_dir / "audit.jsonl")
         self._registry = ToolRegistry()
         register_builtin_tools(
             self._registry,
-            repo_root=repo_root,
+            repo_root=self._repo_root,
             limits=self._limits,
             read_audit_entries=self._audit_logger.read,
+            config=self._config,
         )
         self._fallback_request_counter = 0
 
@@ -310,21 +318,76 @@ class StdioServer:
 
 def create_server(
     repo_root: str,
-    limits: SecurityLimits | None = None,
+    limits: object | None = None,
     data_dir: str | None = None,
+    cli_overrides: CliOverrides | None = None,
 ) -> StdioServer:
     """Create a configured STDIO server instance."""
-    resolved_data_dir = Path(data_dir).resolve() if data_dir is not None else None
-    return StdioServer(
-        repo_root=Path(repo_root).resolve(), limits=limits, data_dir=resolved_data_dir
+    legacy_max_file_bytes: int | None = None
+    legacy_max_open_lines: int | None = None
+    legacy_max_total_bytes: int | None = None
+    legacy_max_search_hits: int | None = None
+    if limits is not None:
+        legacy_max_file_bytes = getattr(limits, "max_file_bytes", None)
+        legacy_max_open_lines = getattr(limits, "max_open_lines", None)
+        legacy_max_total_bytes = getattr(limits, "max_total_bytes_per_response", None)
+        legacy_max_search_hits = getattr(limits, "max_search_hits", None)
+
+    overrides = CliOverrides(
+        data_dir=Path(data_dir).resolve() if data_dir is not None else None,
+        max_file_bytes=legacy_max_file_bytes,
+        max_open_lines=legacy_max_open_lines,
+        max_total_bytes_per_response=legacy_max_total_bytes,
+        max_search_hits=legacy_max_search_hits,
     )
+    if cli_overrides is not None:
+        overrides = CliOverrides(
+            data_dir=cli_overrides.data_dir or overrides.data_dir,
+            max_file_bytes=(
+                cli_overrides.max_file_bytes
+                if cli_overrides.max_file_bytes is not None
+                else overrides.max_file_bytes
+            ),
+            max_open_lines=(
+                cli_overrides.max_open_lines
+                if cli_overrides.max_open_lines is not None
+                else overrides.max_open_lines
+            ),
+            max_total_bytes_per_response=(
+                cli_overrides.max_total_bytes_per_response
+                if cli_overrides.max_total_bytes_per_response is not None
+                else overrides.max_total_bytes_per_response
+            ),
+            max_search_hits=(
+                cli_overrides.max_search_hits
+                if cli_overrides.max_search_hits is not None
+                else overrides.max_search_hits
+            ),
+            python_enabled=cli_overrides.python_enabled,
+        )
+
+    config = load_effective_config(repo_root=Path(repo_root).resolve(), overrides=overrides)
+    return StdioServer(config=config)
 
 
 def main(argv: list[str] | None = None) -> int:
     """Entrypoint for the repo interrogator server process."""
     parser = build_arg_parser()
     args = parser.parse_args(argv)
-    server = create_server(repo_root=args.repo_root, data_dir=args.data_dir)
+    python_enabled: bool | None = None
+    if args.python_adapter_enabled == "true":
+        python_enabled = True
+    if args.python_adapter_enabled == "false":
+        python_enabled = False
+    overrides = CliOverrides(
+        data_dir=Path(args.data_dir).resolve() if args.data_dir is not None else None,
+        max_file_bytes=args.max_file_bytes,
+        max_open_lines=args.max_open_lines,
+        max_total_bytes_per_response=args.max_total_bytes_per_response,
+        max_search_hits=args.max_search_hits,
+        python_enabled=python_enabled,
+    )
+    server = create_server(repo_root=args.repo_root, cli_overrides=overrides)
     server.serve(in_stream=sys.stdin, out_stream=sys.stdout)
     return 0
 

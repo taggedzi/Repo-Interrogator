@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+from repo_mcp.config import ServerConfig
 from repo_mcp.security import (
     PolicyBlockedError,
     SecurityLimits,
@@ -20,9 +21,10 @@ def register_builtin_tools(
     repo_root: Path,
     limits: SecurityLimits,
     read_audit_entries: Callable[[str | None, int], list[dict[str, object]]],
+    config: ServerConfig,
 ) -> None:
     """Register the minimum v1 tool set with deterministic stub behavior."""
-    registry.register("repo.status", _status_handler(repo_root, limits))
+    registry.register("repo.status", _status_handler(repo_root, limits, config))
     registry.register("repo.list_files", _list_files_handler)
     registry.register("repo.open_file", _open_file_handler(repo_root, limits))
     registry.register("repo.search", _search_handler(limits))
@@ -30,20 +32,24 @@ def register_builtin_tools(
     registry.register("repo.audit_log", _audit_log_handler(limits, read_audit_entries))
 
 
-def _status_handler(repo_root: Path, limits: SecurityLimits) -> ToolHandler:
+def _status_handler(repo_root: Path, limits: SecurityLimits, config: ServerConfig) -> ToolHandler:
     def handler(_: dict[str, object]) -> dict[str, object]:
+        enabled_adapters: list[str] = []
+        if config.adapters.python_enabled:
+            enabled_adapters.append("python")
         return {
             "repo_root": str(repo_root),
             "index_status": "not_indexed",
             "last_refresh_timestamp": None,
             "indexed_file_count": 0,
-            "enabled_adapters": [],
+            "enabled_adapters": enabled_adapters,
             "limits_summary": {
                 "max_file_bytes": limits.max_file_bytes,
                 "max_open_lines": limits.max_open_lines,
                 "max_total_bytes_per_response": limits.max_total_bytes_per_response,
                 "max_search_hits": limits.max_search_hits,
             },
+            "effective_config": config.to_public_dict(),
         }
 
     return handler
