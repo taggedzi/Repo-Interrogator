@@ -5,11 +5,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TextIO
 
 from repo_mcp.adapters import AdapterRegistry, build_adapter_registry
+from repo_mcp.bundler import BundleBudget, BundleResult, build_context_bundle
 from repo_mcp.config import CliOverrides, ServerConfig, load_effective_config
 from repo_mcp.index import IndexManager, IndexSchemaUnsupportedError
 from repo_mcp.logging import AuditEvent, JsonlAuditLogger, sanitize_arguments, utc_timestamp
@@ -75,6 +76,7 @@ class StdioServer:
             read_index_status=self._index_manager.status,
             search_index=self._index_manager.search,
             outline_path=self._outline_path,
+            build_context_bundle=self._build_context_bundle,
             config=self._config,
         )
         self._fallback_request_counter = 0
@@ -220,7 +222,12 @@ class StdioServer:
             )
             return response
 
-        response = self.success_response(request_id=request.request_id, result=result)
+        warnings = _extract_result_warnings(result)
+        response = self.success_response(
+            request_id=request.request_id,
+            result=result,
+            warnings=warnings,
+        )
         enforced = self.enforce_response_size_limit(
             request_id=request.request_id, response=response
         )
@@ -274,13 +281,17 @@ class StdioServer:
         return f"req-{self._fallback_request_counter:06d}"
 
     @staticmethod
-    def success_response(request_id: str, result: dict[str, object]) -> dict[str, object]:
+    def success_response(
+        request_id: str,
+        result: dict[str, object],
+        warnings: list[str] | None = None,
+    ) -> dict[str, object]:
         """Build success envelope."""
         return {
             "request_id": request_id,
             "ok": True,
             "result": result,
-            "warnings": [],
+            "warnings": warnings or [],
             "blocked": False,
         }
 
@@ -380,6 +391,88 @@ class StdioServer:
             ],
         }
 
+    def _read_repo_lines(self, path: str, start_line: int, end_line: int) -> list[str]:
+        resolved = resolve_repo_path(repo_root=self._repo_root, candidate=path)
+        enforce_file_access_policy(
+            repo_root=self._repo_root,
+            resolved_path=resolved,
+            limits=self._limits,
+        )
+        if not resolved.exists() or not resolved.is_file():
+            return []
+        lines = resolved.read_text(encoding="utf-8", errors="replace").splitlines()
+        start_index = max(0, start_line - 1)
+        end_index = min(len(lines), end_line)
+        return lines[start_index:end_index]
+
+    def _build_context_bundle(self, arguments: dict[str, object]) -> dict[str, object]:
+        budget_payload = arguments.get("budget", {})
+        if not isinstance(budget_payload, dict):
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.build_context_bundle budget must be an object.",
+            )
+
+        max_files = budget_payload.get("max_files")
+        max_total_lines = budget_payload.get("max_total_lines")
+        if not isinstance(max_files, int) or not isinstance(max_total_lines, int):
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.build_context_bundle budget values must be integers.",
+            )
+
+        prompt = arguments.get("prompt")
+        if not isinstance(prompt, str):
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.build_context_bundle prompt must be a string.",
+            )
+
+        include_tests = arguments.get("include_tests", True)
+        if not isinstance(include_tests, bool):
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.build_context_bundle include_tests must be boolean.",
+            )
+
+        result = build_context_bundle(
+            prompt=prompt,
+            budget=BundleBudget(max_files=max_files, max_total_lines=max_total_lines),
+            search_fn=self._index_manager.search,
+            read_lines_fn=self._read_repo_lines,
+            include_tests=include_tests,
+            strategy="hybrid",
+            top_k_per_query=self._limits.max_search_hits,
+        )
+        response = _bundle_result_to_dict(result)
+        warnings = self._write_last_bundle_artifacts(response)
+        if warnings:
+            response["__warnings__"] = warnings
+        return response
+
+    def _write_last_bundle_artifacts(self, payload: dict[str, object]) -> list[str]:
+        warnings: list[str] = []
+        try:
+            self._data_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            warnings.append(f"Failed to prepare data_dir for bundle artifacts: {error}")
+            return warnings
+        json_path = self._data_dir / "last_bundle.json"
+        md_path = self._data_dir / "last_bundle.md"
+        try:
+            with json_path.open("w", encoding="utf-8") as handle:
+                json.dump(payload, handle, sort_keys=True, indent=2)
+                handle.write("\n")
+        except OSError as error:
+            warnings.append(f"Failed to write last_bundle.json: {error}")
+        try:
+            markdown = _bundle_markdown(payload)
+            with md_path.open("w", encoding="utf-8") as handle:
+                handle.write(markdown)
+        except OSError as error:
+            warnings.append(f"Failed to write last_bundle.md: {error}")
+        return warnings
+
 
 def create_server(
     repo_root: str,
@@ -455,6 +548,74 @@ def main(argv: list[str] | None = None) -> int:
     server = create_server(repo_root=args.repo_root, cli_overrides=overrides)
     server.serve(in_stream=sys.stdin, out_stream=sys.stdout)
     return 0
+
+
+def _extract_result_warnings(result: dict[str, object]) -> list[str]:
+    raw = result.pop("__warnings__", None)
+    if not isinstance(raw, list):
+        return []
+    warnings: list[str] = []
+    for item in raw:
+        if isinstance(item, str):
+            warnings.append(item)
+    return warnings
+
+
+def _bundle_result_to_dict(result: BundleResult) -> dict[str, object]:
+    return {
+        "bundle_id": result.bundle_id,
+        "prompt_fingerprint": result.prompt_fingerprint,
+        "strategy": result.strategy,
+        "budget": asdict(result.budget),
+        "totals": asdict(result.totals),
+        "selections": [asdict(selection) for selection in result.selections],
+        "citations": [asdict(citation) for citation in result.citations],
+        "audit": {
+            "search_queries": list(result.audit.search_queries),
+            "dedupe_counts": {
+                "before": result.audit.dedupe_before,
+                "after": result.audit.dedupe_after,
+            },
+            "budget_enforcement": list(result.audit.budget_enforcement),
+        },
+    }
+
+
+def _bundle_markdown(payload: dict[str, object]) -> str:
+    lines = ["# Last Context Bundle", ""]
+    bundle_id = payload.get("bundle_id")
+    prompt_fingerprint = payload.get("prompt_fingerprint")
+    strategy = payload.get("strategy")
+    lines.append(f"- bundle_id: `{bundle_id}`")
+    lines.append(f"- prompt_fingerprint: `{prompt_fingerprint}`")
+    lines.append(f"- strategy: `{strategy}`")
+    lines.append("")
+    totals = payload.get("totals")
+    if isinstance(totals, dict):
+        lines.append("## Totals")
+        lines.append(f"- selected_files: `{totals.get('selected_files')}`")
+        lines.append(f"- selected_lines: `{totals.get('selected_lines')}`")
+        lines.append(f"- truncated: `{totals.get('truncated')}`")
+        lines.append("")
+    selections = payload.get("selections")
+    if isinstance(selections, list):
+        lines.append("## Selections")
+        for index, selection in enumerate(selections):
+            if not isinstance(selection, dict):
+                continue
+            lines.append(f"### Selection {index + 1}")
+            lines.append(f"- path: `{selection.get('path')}`")
+            lines.append(f"- range: `{selection.get('start_line')}`-`{selection.get('end_line')}`")
+            lines.append(f"- score: `{selection.get('score')}`")
+            lines.append(f"- rationale: {selection.get('rationale')}")
+            excerpt = selection.get("excerpt")
+            if isinstance(excerpt, str):
+                lines.append("")
+                lines.append("```text")
+                lines.append(excerpt)
+                lines.append("```")
+            lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 if __name__ == "__main__":

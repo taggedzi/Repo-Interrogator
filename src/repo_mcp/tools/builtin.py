@@ -30,6 +30,7 @@ def register_builtin_tools(
     read_index_status: Callable[[], IndexStatus],
     search_index: Callable[[str, int, str | None, str | None], list[dict[str, object]]],
     outline_path: Callable[[str], dict[str, object]],
+    build_context_bundle: Callable[[dict[str, object]], dict[str, object]],
     config: ServerConfig,
 ) -> None:
     """Register the minimum v1 tool set with deterministic stub behavior."""
@@ -41,6 +42,10 @@ def register_builtin_tools(
     registry.register("repo.open_file", _open_file_handler(repo_root, limits))
     registry.register("repo.outline", _outline_handler(outline_path))
     registry.register("repo.search", _search_handler(limits, search_index))
+    registry.register(
+        "repo.build_context_bundle",
+        _build_context_bundle_handler(build_context_bundle),
+    )
     registry.register("repo.refresh_index", _refresh_index_handler(refresh_index))
     registry.register("repo.audit_log", _audit_log_handler(limits, read_audit_entries))
 
@@ -180,6 +185,69 @@ def _search_handler(
             path_prefix,
         )
         return {"hits": hits}
+
+    return handler
+
+
+def _build_context_bundle_handler(
+    build_context_bundle: Callable[[dict[str, object]], dict[str, object]],
+) -> ToolHandler:
+    def handler(arguments: dict[str, object]) -> dict[str, object]:
+        prompt = arguments.get("prompt")
+        budget = arguments.get("budget")
+        strategy = arguments.get("strategy", "hybrid")
+        include_tests = arguments.get("include_tests", True)
+
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.build_context_bundle prompt must be a non-empty string.",
+            )
+        if not isinstance(budget, dict):
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.build_context_bundle budget must be an object.",
+            )
+        if not isinstance(strategy, str):
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.build_context_bundle strategy must be a string.",
+            )
+        if strategy != "hybrid":
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.build_context_bundle strategy must be 'hybrid' in v1.",
+            )
+        if not isinstance(include_tests, bool):
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.build_context_bundle include_tests must be a boolean.",
+            )
+
+        max_files = budget.get("max_files")
+        max_total_lines = budget.get("max_total_lines")
+        if not isinstance(max_files, int) or max_files < 1:
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.build_context_bundle budget.max_files must be >= 1.",
+            )
+        if not isinstance(max_total_lines, int) or max_total_lines < 1:
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.build_context_bundle budget.max_total_lines must be >= 1.",
+            )
+
+        return build_context_bundle(
+            {
+                "prompt": prompt,
+                "budget": {
+                    "max_files": max_files,
+                    "max_total_lines": max_total_lines,
+                },
+                "strategy": strategy,
+                "include_tests": include_tests,
+            }
+        )
 
     return handler
 
