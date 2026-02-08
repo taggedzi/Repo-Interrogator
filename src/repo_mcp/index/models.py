@@ -12,3 +12,14 @@ class FileRecord:
     path: str
     size: int
     mtime_ns: int
+    content_hash: str
+
+
+@dataclass(slots=True, frozen=True)
+class IndexDelta:
+    """Deterministic change classification for index refresh."""
+
+    added: tuple[str, ...]
+    updated: tuple[str, ...]
+    unchanged: tuple[str, ...]
+    removed: tuple[str, ...]
