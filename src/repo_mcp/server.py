@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
+from repo_mcp.logging import AuditEvent, JsonlAuditLogger, sanitize_arguments, utc_timestamp
 from repo_mcp.security import PathBlockedError, PolicyBlockedError, SecurityLimits
 from repo_mcp.tools.builtin import register_builtin_tools
 from repo_mcp.tools.registry import ToolDispatchError, ToolRegistry
@@ -34,11 +35,23 @@ def build_arg_parser() -> argparse.ArgumentParser:
 class StdioServer:
     """Minimal deterministic STDIO server for tool routing."""
 
-    def __init__(self, repo_root: Path, limits: SecurityLimits | None = None) -> None:
+    def __init__(
+        self,
+        repo_root: Path,
+        limits: SecurityLimits | None = None,
+        data_dir: Path | None = None,
+    ) -> None:
         self._repo_root = repo_root
         self._limits = limits or SecurityLimits()
+        self._data_dir = data_dir or (repo_root / ".repo_mcp")
+        self._audit_logger = JsonlAuditLogger(path=self._data_dir / "audit.jsonl")
         self._registry = ToolRegistry()
-        register_builtin_tools(self._registry, repo_root=repo_root, limits=self._limits)
+        register_builtin_tools(
+            self._registry,
+            repo_root=repo_root,
+            limits=self._limits,
+            read_audit_entries=self._audit_logger.read,
+        )
         self._fallback_request_counter = 0
 
     def serve(self, in_stream: TextIO, out_stream: TextIO) -> None:
@@ -56,17 +69,35 @@ class StdioServer:
         try:
             payload = json.loads(raw_line)
         except json.JSONDecodeError:
-            return self.error_response(
-                request_id=self.next_request_id(),
+            request_id = self.next_request_id()
+            response = self.error_response(
+                request_id=request_id,
                 code="INVALID_JSON",
                 message="Request must be valid JSON.",
             )
+            self.log_request(
+                request_id=request_id,
+                tool_name="invalid_json",
+                arguments={"raw_line_length": len(raw_line)},
+                response=response,
+            )
+            return response
         return self.handle_payload(payload)
 
     def handle_payload(self, payload: object) -> dict[str, object]:
         """Validate and dispatch a parsed payload."""
         parsed = self.parse_request(payload)
         if isinstance(parsed, dict):
+            request_id_value = parsed.get("request_id")
+            request_id = (
+                request_id_value if isinstance(request_id_value, str) else self.next_request_id()
+            )
+            self.log_request(
+                request_id=request_id,
+                tool_name="invalid_request",
+                arguments={},
+                response=parsed,
+            )
             return parsed
 
         request = parsed
@@ -96,32 +127,69 @@ class StdioServer:
         try:
             result = self._registry.dispatch(name=tool_name, arguments=arguments)
         except PathBlockedError as error:
-            return self.blocked_response(
+            response = self.blocked_response(
                 request_id=request.request_id,
                 reason=error.reason,
                 hint=error.hint,
             )
+            self.log_request(
+                request_id=request.request_id,
+                tool_name=tool_name,
+                arguments=arguments,
+                response=response,
+            )
+            return response
         except PolicyBlockedError as error:
-            return self.blocked_response(
+            response = self.blocked_response(
                 request_id=request.request_id,
                 reason=error.reason,
                 hint=error.hint,
             )
+            self.log_request(
+                request_id=request.request_id,
+                tool_name=tool_name,
+                arguments=arguments,
+                response=response,
+            )
+            return response
         except ToolDispatchError as error:
-            return self.error_response(
+            response = self.error_response(
                 request_id=request.request_id,
                 code=error.code,
                 message=error.message,
             )
+            self.log_request(
+                request_id=request.request_id,
+                tool_name=tool_name,
+                arguments=arguments,
+                response=response,
+            )
+            return response
         except Exception:
-            return self.error_response(
+            response = self.error_response(
                 request_id=request.request_id,
                 code="INTERNAL_ERROR",
                 message="Unhandled server error while executing tool.",
             )
+            self.log_request(
+                request_id=request.request_id,
+                tool_name=tool_name,
+                arguments=arguments,
+                response=response,
+            )
+            return response
 
         response = self.success_response(request_id=request.request_id, result=result)
-        return self.enforce_response_size_limit(request_id=request.request_id, response=response)
+        enforced = self.enforce_response_size_limit(
+            request_id=request.request_id, response=response
+        )
+        self.log_request(
+            request_id=request.request_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            response=enforced,
+        )
+        return enforced
 
     def parse_request(self, payload: object) -> Request | dict[str, object]:
         """Validate request payload and return normalized Request."""
@@ -214,17 +282,49 @@ class StdioServer:
             hint="Request fewer lines or lower result volume.",
         )
 
+    def log_request(
+        self,
+        request_id: str,
+        tool_name: str,
+        arguments: dict[str, object],
+        response: dict[str, object],
+    ) -> None:
+        """Log one sanitized request event."""
+        error_payload = response.get("error")
+        error_code: str | None = None
+        if isinstance(error_payload, dict):
+            code_value = error_payload.get("code")
+            if isinstance(code_value, str):
+                error_code = code_value
+        event = AuditEvent(
+            timestamp=utc_timestamp(),
+            request_id=request_id,
+            tool=tool_name,
+            ok=bool(response.get("ok", False)),
+            blocked=bool(response.get("blocked", False)),
+            error_code=error_code,
+            metadata=sanitize_arguments(arguments),
+        )
+        self._audit_logger.append(event)
 
-def create_server(repo_root: str, limits: SecurityLimits | None = None) -> StdioServer:
+
+def create_server(
+    repo_root: str,
+    limits: SecurityLimits | None = None,
+    data_dir: str | None = None,
+) -> StdioServer:
     """Create a configured STDIO server instance."""
-    return StdioServer(repo_root=Path(repo_root).resolve(), limits=limits)
+    resolved_data_dir = Path(data_dir).resolve() if data_dir is not None else None
+    return StdioServer(
+        repo_root=Path(repo_root).resolve(), limits=limits, data_dir=resolved_data_dir
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     """Entrypoint for the repo interrogator server process."""
     parser = build_arg_parser()
     args = parser.parse_args(argv)
-    server = create_server(repo_root=args.repo_root)
+    server = create_server(repo_root=args.repo_root, data_dir=args.data_dir)
     server.serve(in_stream=sys.stdin, out_stream=sys.stdout)
     return 0
 

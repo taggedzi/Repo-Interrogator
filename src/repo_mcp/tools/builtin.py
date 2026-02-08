@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from repo_mcp.security import (
@@ -14,14 +15,19 @@ from repo_mcp.security import (
 from repo_mcp.tools.registry import ToolHandler, ToolRegistry
 
 
-def register_builtin_tools(registry: ToolRegistry, repo_root: Path, limits: SecurityLimits) -> None:
+def register_builtin_tools(
+    registry: ToolRegistry,
+    repo_root: Path,
+    limits: SecurityLimits,
+    read_audit_entries: Callable[[str | None, int], list[dict[str, object]]],
+) -> None:
     """Register the minimum v1 tool set with deterministic stub behavior."""
     registry.register("repo.status", _status_handler(repo_root, limits))
     registry.register("repo.list_files", _list_files_handler)
     registry.register("repo.open_file", _open_file_handler(repo_root, limits))
     registry.register("repo.search", _search_handler(limits))
     registry.register("repo.refresh_index", _refresh_index_handler)
-    registry.register("repo.audit_log", _audit_log_handler)
+    registry.register("repo.audit_log", _audit_log_handler(limits, read_audit_entries))
 
 
 def _status_handler(repo_root: Path, limits: SecurityLimits) -> ToolHandler:
@@ -101,5 +107,21 @@ def _refresh_index_handler(_: dict[str, object]) -> dict[str, object]:
     return {"added": 0, "updated": 0, "removed": 0, "duration_ms": 0, "timestamp": None}
 
 
-def _audit_log_handler(_: dict[str, object]) -> dict[str, object]:
-    return {"entries": []}
+def _audit_log_handler(
+    limits: SecurityLimits,
+    read_audit_entries: Callable[[str | None, int], list[dict[str, object]]],
+) -> ToolHandler:
+    def handler(arguments: dict[str, object]) -> dict[str, object]:
+        since_value = arguments.get("since")
+        limit_value = arguments.get("limit", limits.max_search_hits)
+
+        since: str | None = since_value if isinstance(since_value, str) else None
+        limit = limit_value if isinstance(limit_value, int) else limits.max_search_hits
+        if limit < 1:
+            limit = 1
+        if limit > limits.max_search_hits:
+            limit = limits.max_search_hits
+
+        return {"entries": read_audit_entries(since, limit)}
+
+    return handler
