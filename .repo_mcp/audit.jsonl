@@ -58,3 +58,13 @@
 {"blocked": true, "error_code": "PATH_BLOCKED", "metadata": {"end_line": 5, "path": "../secrets.txt", "start_line": 1}, "ok": false, "request_id": "req-block-1", "timestamp": "2026-02-08T22:02:12.801Z", "tool": "repo.open_file"}
 {"blocked": false, "error_code": "INVALID_JSON", "metadata": {"raw_line_length": 9}, "ok": false, "request_id": "req-000001", "timestamp": "2026-02-08T22:02:12.821Z", "tool": "invalid_json"}
 {"blocked": false, "error_code": "UNKNOWN_TOOL", "metadata": {"k_length": 1, "k_present": true}, "ok": false, "request_id": "abc-123", "timestamp": "2026-02-08T22:02:12.836Z", "tool": "repo.unknown"}
+{"blocked": false, "error_code": null, "metadata": {}, "ok": true, "request_id": "req-1", "timestamp": "2026-02-08T22:11:19.093Z", "tool": "repo.status"}
+{"blocked": false, "error_code": null, "metadata": {"query_length": 1, "query_present": true}, "ok": true, "request_id": "req-2", "timestamp": "2026-02-08T22:11:19.095Z", "tool": "repo.search"}
+{"blocked": true, "error_code": "PATH_BLOCKED", "metadata": {"end_line": 5, "path": "../secrets.txt", "start_line": 1}, "ok": false, "request_id": "req-block-1", "timestamp": "2026-02-08T22:11:21.094Z", "tool": "repo.open_file"}
+{"blocked": false, "error_code": "INVALID_JSON", "metadata": {"raw_line_length": 9}, "ok": false, "request_id": "req-000001", "timestamp": "2026-02-08T22:11:21.169Z", "tool": "invalid_json"}
+{"blocked": false, "error_code": "UNKNOWN_TOOL", "metadata": {"k_length": 1, "k_present": true}, "ok": false, "request_id": "abc-123", "timestamp": "2026-02-08T22:11:21.185Z", "tool": "repo.unknown"}
+{"blocked": false, "error_code": null, "metadata": {}, "ok": true, "request_id": "req-1", "timestamp": "2026-02-08T22:11:45.457Z", "tool": "repo.status"}
+{"blocked": false, "error_code": null, "metadata": {"query_length": 1, "query_present": true}, "ok": true, "request_id": "req-2", "timestamp": "2026-02-08T22:11:45.459Z", "tool": "repo.search"}
+{"blocked": true, "error_code": "PATH_BLOCKED", "metadata": {"end_line": 5, "path": "../secrets.txt", "start_line": 1}, "ok": false, "request_id": "req-block-1", "timestamp": "2026-02-08T22:11:45.638Z", "tool": "repo.open_file"}
+{"blocked": false, "error_code": "INVALID_JSON", "metadata": {"raw_line_length": 9}, "ok": false, "request_id": "req-000001", "timestamp": "2026-02-08T22:11:45.657Z", "tool": "invalid_json"}
+{"blocked": false, "error_code": "UNKNOWN_TOOL", "metadata": {"k_length": 1, "k_present": true}, "ok": false, "request_id": "abc-123", "timestamp": "2026-02-08T22:11:45.676Z", "tool": "repo.unknown"}
