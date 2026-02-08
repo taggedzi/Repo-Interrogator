@@ -1,0 +1,15 @@
+# Example repository-level configuration for Repo Interrogator.
+
+[limits]
+max_file_bytes = 1048576
+max_open_lines = 500
+max_total_bytes_per_response = 262144
+max_search_hits = 50
+
+[index]
+include_extensions = [".py", ".md", ".rst", ".toml", ".yaml", ".yml", ".json", ".ini", ".cfg"]
+exclude_globs = ["**/.git/**", "**/__pycache__/**", "**/.venv/**"]
+
+[adapters]
+python_enabled = true
+

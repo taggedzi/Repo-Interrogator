@@ -1,0 +1,1 @@
+"""Repo Interrogator MCP package."""
