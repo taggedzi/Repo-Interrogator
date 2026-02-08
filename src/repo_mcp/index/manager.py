@@ -211,7 +211,7 @@ class IndexManager:
         path_prefix: str | None,
     ) -> list[ChunkRecord]:
         output: list[ChunkRecord] = []
-        normalized_prefix = path_prefix.replace("\\", "/") if isinstance(path_prefix, str) else None
+        normalized_prefix = _normalize_path_prefix(path_prefix)
         for chunk in chunks:
             if file_glob is not None and not fnmatch.fnmatch(chunk.path, file_glob):
                 continue
@@ -340,3 +340,14 @@ def _as_optional_str(value: object) -> str | None:
     if isinstance(value, str):
         return value
     return None
+
+
+def _normalize_path_prefix(path_prefix: str | None) -> str | None:
+    if not isinstance(path_prefix, str):
+        return None
+    normalized = path_prefix.replace("\\", "/").strip()
+    while "//" in normalized:
+        normalized = normalized.replace("//", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized
