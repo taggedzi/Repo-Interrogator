@@ -1,32 +1,117 @@
 # Repo Interrogator
 
-Repo Interrogator is a local-first, deterministic MCP server for safe interrogation of a single repository.
+Repo Interrogator is a local-first, deterministic MCP server that helps AI tools inspect one code repository safely.
 
-## Scope
+It is for repository interrogation, not code modification.
 
-- Integration-first MCP server for AI clients.
-- STDIO transport only in v1.
-- Deterministic indexing, search, outlining, and context bundling.
-- Strong repository sandboxing with deny-by-default file access.
+What it does:
+- indexes files inside one `repo_root`
+- runs deterministic BM25 search
+- outlines Python files with AST
+- builds context bundles with citations
+- writes sanitized audit logs
 
-## Limits Policy (v1)
+What it does not do:
+- no LLM calls in v1
+- no code writes or patching
+- no multi-repo routing
+- no HTTP/SSE transport in v1
 
-Default limits:
+## Supported Environments
 
-- `max_file_bytes = 1_048_576`
-- `max_open_lines = 500`
-- `max_total_bytes_per_response = 262_144`
-- `max_search_hits = 50`
+- Python: `>=3.11`
+- Tested in this project: Linux and WSL paths, with explicit Windows path normalization tests
+- Expected to run on: Linux, macOS, Windows (with Python 3.11+)
 
-Repo config and startup overrides may lower these values or raise them only up to hard caps:
+## Quick Start
 
-- `max_file_bytes <= 4_194_304`
-- `max_open_lines <= 2_000`
-- `max_total_bytes_per_response <= 1_048_576`
-- `max_search_hits <= 200`
+1. Clone this repository and enter it:
 
-Values above caps fail fast with explicit configuration errors.
+```bash
+git clone <your-fork-or-repo-url>
+cd repomap
+```
 
-## Status
+2. Install (end-user style):
 
-This repository is under active implementation. See `SPEC.md` for product requirements and `TODO.md` for the implementation sequence.
+```bash
+python -m pip install .
+```
+
+This installs the console command `repo-mcp`.
+
+3. Run against a local repository:
+
+```bash
+repo-mcp --repo-root /absolute/path/to/target/repo
+```
+
+The server uses STDIO. It waits for newline-delimited JSON requests and writes newline-delimited JSON responses.
+
+4. Verify it responds:
+
+```bash
+printf '%s\n' '{"id":"req-1","method":"repo.status","params":{}}' \
+  | repo-mcp --repo-root /absolute/path/to/target/repo
+```
+
+You should get a JSON envelope with keys like:
+- `request_id`
+- `ok`
+- `result`
+- `warnings`
+- `blocked`
+
+## Developer Quick Start
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+python -m pip install ruff mypy pytest build
+```
+
+Run checks:
+
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+## Tool Surface (Current)
+
+- `repo.status`
+- `repo.list_files`
+- `repo.open_file`
+- `repo.outline`
+- `repo.search`
+- `repo.build_context_bundle`
+- `repo.refresh_index`
+- `repo.audit_log`
+
+## Documentation
+
+- Installation: `docs/INSTALL.md`
+- Usage and request/response examples: `docs/USAGE.md`
+- Configuration and limits: `docs/CONFIG.md`
+- AI client integration (MCP over STDIO): `docs/AI_INTEGRATION.md`
+- Troubleshooting: `docs/TROUBLESHOOTING.md`
+- Security model and blocked behavior: `docs/SECURITY.md`
+- Release process: `docs/release.md`
+
+## Docs Verification Checklist
+
+Run these commands to validate docs examples against the current codebase:
+
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+
+# quick server smoke
+printf '%s\n' '{"id":"req-docs-1","method":"repo.status","params":{}}' \
+  | python -m repo_mcp.server --repo-root .
+```

@@ -1,5 +1,7 @@
 # Security Policy
 
+For the full security model and sandbox behavior, see `docs/SECURITY.md`.
+
 ## Supported Versions
 
 Security support applies to the latest development branch until the first stable release policy is published.
