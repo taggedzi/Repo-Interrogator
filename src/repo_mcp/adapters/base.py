@@ -12,8 +12,10 @@ class OutlineSymbol:
 
     kind: str
     name: str
+    signature: str | None
     start_line: int
     end_line: int
+    doc: str | None
 
 
 class LanguageAdapter(Protocol):

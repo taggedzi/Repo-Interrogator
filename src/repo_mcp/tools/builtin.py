@@ -29,6 +29,7 @@ def register_builtin_tools(
     refresh_index: Callable[[bool], dict[str, object]],
     read_index_status: Callable[[], IndexStatus],
     search_index: Callable[[str, int, str | None, str | None], list[dict[str, object]]],
+    outline_path: Callable[[str], dict[str, object]],
     config: ServerConfig,
 ) -> None:
     """Register the minimum v1 tool set with deterministic stub behavior."""
@@ -38,6 +39,7 @@ def register_builtin_tools(
     )
     registry.register("repo.list_files", _list_files_handler)
     registry.register("repo.open_file", _open_file_handler(repo_root, limits))
+    registry.register("repo.outline", _outline_handler(outline_path))
     registry.register("repo.search", _search_handler(limits, search_index))
     registry.register("repo.refresh_index", _refresh_index_handler(refresh_index))
     registry.register("repo.audit_log", _audit_log_handler(limits, read_audit_entries))
@@ -79,6 +81,19 @@ def _status_handler(
 
 def _list_files_handler(_: dict[str, object]) -> dict[str, object]:
     return {"files": []}
+
+
+def _outline_handler(outline_path: Callable[[str], dict[str, object]]) -> ToolHandler:
+    def handler(arguments: dict[str, object]) -> dict[str, object]:
+        path_value = arguments.get("path")
+        if not isinstance(path_value, str) or not path_value:
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.outline path must be a non-empty string.",
+            )
+        return outline_path(path_value)
+
+    return handler
 
 
 def _open_file_handler(repo_root: Path, limits: SecurityLimits) -> ToolHandler:

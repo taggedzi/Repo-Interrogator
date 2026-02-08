@@ -9,10 +9,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
+from repo_mcp.adapters import AdapterRegistry, build_adapter_registry
 from repo_mcp.config import CliOverrides, ServerConfig, load_effective_config
 from repo_mcp.index import IndexManager, IndexSchemaUnsupportedError
 from repo_mcp.logging import AuditEvent, JsonlAuditLogger, sanitize_arguments, utc_timestamp
-from repo_mcp.security import PathBlockedError, PolicyBlockedError
+from repo_mcp.security import (
+    PathBlockedError,
+    PolicyBlockedError,
+    enforce_file_access_policy,
+    resolve_repo_path,
+)
 from repo_mcp.tools.builtin import register_builtin_tools
 from repo_mcp.tools.registry import ToolDispatchError, ToolRegistry
 
@@ -52,6 +58,7 @@ class StdioServer:
         self._limits = config.limits
         self._data_dir = config.data_dir
         self._config = config
+        self._adapters: AdapterRegistry = build_adapter_registry(config)
         self._audit_logger = JsonlAuditLogger(path=self._data_dir / "audit.jsonl")
         self._index_manager = IndexManager(
             repo_root=self._repo_root,
@@ -67,6 +74,7 @@ class StdioServer:
             refresh_index=self._index_manager.refresh,
             read_index_status=self._index_manager.status,
             search_index=self._index_manager.search,
+            outline_path=self._outline_path,
             config=self._config,
         )
         self._fallback_request_counter = 0
@@ -339,6 +347,38 @@ class StdioServer:
             metadata=sanitize_arguments(arguments),
         )
         self._audit_logger.append(event)
+
+    def _outline_path(self, path: str) -> dict[str, object]:
+        resolved = resolve_repo_path(repo_root=self._repo_root, candidate=path)
+        enforce_file_access_policy(
+            repo_root=self._repo_root,
+            resolved_path=resolved,
+            limits=self._limits,
+        )
+        if not resolved.exists() or not resolved.is_file():
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message=f"repo.outline path is not a readable file: {path}",
+            )
+        relative_path = resolved.relative_to(self._repo_root).as_posix()
+        text = resolved.read_text(encoding="utf-8", errors="replace")
+        adapter = self._adapters.select(relative_path)
+        symbols = adapter.outline(relative_path, text)
+        return {
+            "path": relative_path,
+            "language": adapter.name,
+            "symbols": [
+                {
+                    "kind": symbol.kind,
+                    "name": symbol.name,
+                    "signature": symbol.signature,
+                    "start_line": symbol.start_line,
+                    "end_line": symbol.end_line,
+                    "doc": symbol.doc,
+                }
+                for symbol in symbols
+            ],
+        }
 
 
 def create_server(
