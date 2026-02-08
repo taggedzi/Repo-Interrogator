@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import sys
 from dataclasses import asdict, dataclass
@@ -72,6 +73,7 @@ class StdioServer:
             repo_root=self._repo_root,
             limits=self._limits,
             read_audit_entries=self._audit_logger.read,
+            list_files=self._list_files,
             refresh_index=self._index_manager.refresh,
             read_index_status=self._index_manager.status,
             search_index=self._index_manager.search,
@@ -391,6 +393,54 @@ class StdioServer:
             ],
         }
 
+    def _list_files(self, arguments: dict[str, object]) -> dict[str, object]:
+        glob_value = arguments.get("glob")
+        include_hidden_value = arguments.get("include_hidden", False)
+        max_results_value = arguments.get("max_results", self._limits.max_search_hits)
+
+        file_glob = glob_value if isinstance(glob_value, str) else None
+        include_hidden = include_hidden_value if isinstance(include_hidden_value, bool) else False
+        max_results = (
+            max_results_value
+            if isinstance(max_results_value, int)
+            else self._limits.max_search_hits
+        )
+        if max_results < 1:
+            max_results = 1
+        if max_results > self._limits.max_search_hits:
+            max_results = self._limits.max_search_hits
+
+        files: list[dict[str, object]] = []
+        for candidate in sorted(self._repo_root.rglob("*")):
+            if not candidate.is_file():
+                continue
+            if candidate.is_relative_to(self._data_dir):
+                continue
+            relative = candidate.relative_to(self._repo_root).as_posix()
+            if not include_hidden and _is_hidden_path(relative):
+                continue
+            if file_glob is not None and not fnmatch.fnmatch(relative, file_glob):
+                continue
+            try:
+                enforce_file_access_policy(
+                    repo_root=self._repo_root,
+                    resolved_path=candidate,
+                    limits=self._limits,
+                )
+            except PolicyBlockedError:
+                continue
+            stat = candidate.stat()
+            files.append(
+                {
+                    "path": relative,
+                    "size": stat.st_size,
+                    "mtime": stat.st_mtime_ns,
+                }
+            )
+            if len(files) >= max_results:
+                break
+        return {"files": files}
+
     def _read_repo_lines(self, path: str, start_line: int, end_line: int) -> list[str]:
         resolved = resolve_repo_path(repo_root=self._repo_root, candidate=path)
         enforce_file_access_policy(
@@ -616,6 +666,13 @@ def _bundle_markdown(payload: dict[str, object]) -> str:
                 lines.append("```")
             lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _is_hidden_path(relative: str) -> bool:
+    for part in Path(relative).parts:
+        if part.startswith("."):
+            return True
+    return False
 
 
 if __name__ == "__main__":

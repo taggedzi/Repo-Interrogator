@@ -26,6 +26,7 @@ def register_builtin_tools(
     repo_root: Path,
     limits: SecurityLimits,
     read_audit_entries: Callable[[str | None, int], list[dict[str, object]]],
+    list_files: Callable[[dict[str, object]], dict[str, object]],
     refresh_index: Callable[[bool], dict[str, object]],
     read_index_status: Callable[[], IndexStatus],
     search_index: Callable[[str, int, str | None, str | None], list[dict[str, object]]],
@@ -38,7 +39,7 @@ def register_builtin_tools(
         "repo.status",
         _status_handler(repo_root, limits, config, read_index_status),
     )
-    registry.register("repo.list_files", _list_files_handler)
+    registry.register("repo.list_files", _list_files_handler(list_files))
     registry.register("repo.open_file", _open_file_handler(repo_root, limits))
     registry.register("repo.outline", _outline_handler(outline_path))
     registry.register("repo.search", _search_handler(limits, search_index))
@@ -84,8 +85,13 @@ def _status_handler(
     return handler
 
 
-def _list_files_handler(_: dict[str, object]) -> dict[str, object]:
-    return {"files": []}
+def _list_files_handler(
+    list_files: Callable[[dict[str, object]], dict[str, object]],
+) -> ToolHandler:
+    def handler(arguments: dict[str, object]) -> dict[str, object]:
+        return list_files(arguments)
+
+    return handler
 
 
 def _outline_handler(outline_path: Callable[[str], dict[str, object]]) -> ToolHandler:
