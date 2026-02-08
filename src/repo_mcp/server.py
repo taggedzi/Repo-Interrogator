@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
+from repo_mcp.security import PathBlockedError
 from repo_mcp.tools.builtin import register_builtin_tools
 from repo_mcp.tools.registry import ToolDispatchError, ToolRegistry
 
@@ -93,6 +94,12 @@ class StdioServer:
 
         try:
             result = self._registry.dispatch(name=tool_name, arguments=arguments)
+        except PathBlockedError as error:
+            return self.blocked_response(
+                request_id=request.request_id,
+                reason=error.reason,
+                hint=error.hint,
+            )
         except ToolDispatchError as error:
             return self.error_response(
                 request_id=request.request_id,
@@ -170,6 +177,18 @@ class StdioServer:
             "warnings": [],
             "blocked": False,
             "error": {"code": code, "message": message},
+        }
+
+    @staticmethod
+    def blocked_response(request_id: str, reason: str, hint: str) -> dict[str, object]:
+        """Build explicit blocked response envelope."""
+        return {
+            "request_id": request_id,
+            "ok": False,
+            "result": {"reason": reason, "hint": hint},
+            "warnings": [],
+            "blocked": True,
+            "error": {"code": "PATH_BLOCKED", "message": reason},
         }
 
 
