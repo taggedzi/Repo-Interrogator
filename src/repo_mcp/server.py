@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TextIO
 
 from repo_mcp.config import CliOverrides, ServerConfig, load_effective_config
+from repo_mcp.index import IndexManager, IndexSchemaUnsupportedError
 from repo_mcp.logging import AuditEvent, JsonlAuditLogger, sanitize_arguments, utc_timestamp
 from repo_mcp.security import PathBlockedError, PolicyBlockedError
 from repo_mcp.tools.builtin import register_builtin_tools
@@ -52,12 +53,19 @@ class StdioServer:
         self._data_dir = config.data_dir
         self._config = config
         self._audit_logger = JsonlAuditLogger(path=self._data_dir / "audit.jsonl")
+        self._index_manager = IndexManager(
+            repo_root=self._repo_root,
+            data_dir=self._data_dir,
+            index_config=config.index,
+        )
         self._registry = ToolRegistry()
         register_builtin_tools(
             self._registry,
             repo_root=self._repo_root,
             limits=self._limits,
             read_audit_entries=self._audit_logger.read,
+            refresh_index=self._index_manager.refresh,
+            read_index_status=self._index_manager.status,
             config=self._config,
         )
         self._fallback_request_counter = 0
@@ -165,6 +173,22 @@ class StdioServer:
                 request_id=request.request_id,
                 code=error.code,
                 message=error.message,
+            )
+            self.log_request(
+                request_id=request.request_id,
+                tool_name=tool_name,
+                arguments=arguments,
+                response=response,
+            )
+            return response
+        except IndexSchemaUnsupportedError as error:
+            response = self.error_response(
+                request_id=request.request_id,
+                code="INDEX_SCHEMA_UNSUPPORTED",
+                message=(
+                    f"Stored index schema {error.found} is unsupported; expected "
+                    f"{error.expected}. Run repo.refresh_index with force=true."
+                ),
             )
             self.log_request(
                 request_id=request.request_id,

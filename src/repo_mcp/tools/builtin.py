@@ -6,7 +6,11 @@ from collections.abc import Callable
 from pathlib import Path
 
 from repo_mcp.config import ServerConfig
-from repo_mcp.index import DEFAULT_CHUNK_LINES, DEFAULT_CHUNK_OVERLAP_LINES
+from repo_mcp.index import (
+    DEFAULT_CHUNK_LINES,
+    DEFAULT_CHUNK_OVERLAP_LINES,
+    IndexStatus,
+)
 from repo_mcp.security import (
     PolicyBlockedError,
     SecurityLimits,
@@ -22,27 +26,38 @@ def register_builtin_tools(
     repo_root: Path,
     limits: SecurityLimits,
     read_audit_entries: Callable[[str | None, int], list[dict[str, object]]],
+    refresh_index: Callable[[bool], dict[str, object]],
+    read_index_status: Callable[[], IndexStatus],
     config: ServerConfig,
 ) -> None:
     """Register the minimum v1 tool set with deterministic stub behavior."""
-    registry.register("repo.status", _status_handler(repo_root, limits, config))
+    registry.register(
+        "repo.status",
+        _status_handler(repo_root, limits, config, read_index_status),
+    )
     registry.register("repo.list_files", _list_files_handler)
     registry.register("repo.open_file", _open_file_handler(repo_root, limits))
     registry.register("repo.search", _search_handler(limits))
-    registry.register("repo.refresh_index", _refresh_index_handler)
+    registry.register("repo.refresh_index", _refresh_index_handler(refresh_index))
     registry.register("repo.audit_log", _audit_log_handler(limits, read_audit_entries))
 
 
-def _status_handler(repo_root: Path, limits: SecurityLimits, config: ServerConfig) -> ToolHandler:
+def _status_handler(
+    repo_root: Path,
+    limits: SecurityLimits,
+    config: ServerConfig,
+    read_index_status: Callable[[], IndexStatus],
+) -> ToolHandler:
     def handler(_: dict[str, object]) -> dict[str, object]:
+        index_status = read_index_status()
         enabled_adapters: list[str] = []
         if config.adapters.python_enabled:
             enabled_adapters.append("python")
         return {
             "repo_root": str(repo_root),
-            "index_status": "not_indexed",
-            "last_refresh_timestamp": None,
-            "indexed_file_count": 0,
+            "index_status": index_status.index_status,
+            "last_refresh_timestamp": index_status.last_refresh_timestamp,
+            "indexed_file_count": index_status.indexed_file_count,
             "enabled_adapters": enabled_adapters,
             "limits_summary": {
                 "max_file_bytes": limits.max_file_bytes,
@@ -53,7 +68,7 @@ def _status_handler(repo_root: Path, limits: SecurityLimits, config: ServerConfi
             "chunking_summary": {
                 "chunk_lines": DEFAULT_CHUNK_LINES,
                 "overlap_lines": DEFAULT_CHUNK_OVERLAP_LINES,
-                "indexed_chunk_count": 0,
+                "indexed_chunk_count": index_status.indexed_chunk_count,
             },
             "effective_config": config.to_public_dict(),
         }
@@ -115,8 +130,13 @@ def _search_handler(limits: SecurityLimits) -> ToolHandler:
     return handler
 
 
-def _refresh_index_handler(_: dict[str, object]) -> dict[str, object]:
-    return {"added": 0, "updated": 0, "removed": 0, "duration_ms": 0, "timestamp": None}
+def _refresh_index_handler(refresh_index: Callable[[bool], dict[str, object]]) -> ToolHandler:
+    def handler(arguments: dict[str, object]) -> dict[str, object]:
+        force_value = arguments.get("force", False)
+        force = force_value if isinstance(force_value, bool) else False
+        return refresh_index(force)
+
+    return handler
 
 
 def _audit_log_handler(

@@ -7,6 +7,7 @@ from .chunking import (
     chunk_text,
 )
 from .discovery import detect_index_delta, discover_files, record_map
+from .manager import INDEX_SCHEMA_VERSION, IndexManager, IndexSchemaUnsupportedError, IndexStatus
 from .models import ChunkRecord, FileRecord, IndexDelta
 
 __all__ = [
@@ -14,6 +15,10 @@ __all__ = [
     "DEFAULT_CHUNK_LINES",
     "DEFAULT_CHUNK_OVERLAP_LINES",
     "FileRecord",
+    "INDEX_SCHEMA_VERSION",
+    "IndexManager",
+    "IndexSchemaUnsupportedError",
+    "IndexStatus",
     "IndexDelta",
     "build_chunk_id",
     "chunk_text",
