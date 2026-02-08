@@ -1,0 +1,71 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "release-*"
+  workflow_dispatch:
+    inputs:
+      publish_to_pypi:
+        description: "Publish to PyPI (requires PYPI_API_TOKEN secret)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Build Tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+
+      - name: Build Artifacts
+        run: python -m build
+
+      - name: Artifact Import Smoke Test (Wheel)
+        run: |
+          python -m pip install dist/*.whl
+          python -c "import repo_mcp, repo_mcp.server; print('wheel import ok')"
+
+      - name: Artifact Import Smoke Test (Sdist)
+        run: |
+          python -m pip uninstall -y repo-interrogator || true
+          python -m pip install dist/*.tar.gz
+          python -c "import repo_mcp, repo_mcp.server; print('sdist import ok')"
+
+      - name: Create GitHub Release and Upload Artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+          generate_release_notes: true
+
+      - name: Optional PyPI Publish (Guarded)
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.publish_to_pypi == 'true') || (github.event_name == 'push' && vars.PUBLISH_PYPI == 'true') }}
+        env:
+          TWINE_USERNAME: "__token__"
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          python -m pip install twine
+          python -m twine check dist/*
+          python -m twine upload dist/*
+
