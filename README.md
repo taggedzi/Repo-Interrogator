@@ -28,7 +28,7 @@ What it does not do:
 1. Clone this repository and enter it:
 
 ```bash
-git clone <your-fork-or-repo-url>
+git clone https://github.com/taggedzi/Repo-Interrogator
 cd repomap
 ```
 

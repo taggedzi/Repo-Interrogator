@@ -22,7 +22,7 @@ Repo Interrogator is local and cross-platform by design.
 ### Option A: install from source checkout (most direct)
 
 ```bash
-git clone <your-fork-or-repo-url>
+git clone https://github.com/taggedzi/Repo-Interrogator
 cd repomap
 python -m pip install .
 ```
@@ -50,7 +50,7 @@ repo-mcp --repo-root /absolute/path/to/target/repo
 ## Developer Install
 
 ```bash
-git clone <your-fork-or-repo-url>
+git clone https://github.com/taggedzi/Repo-Interrogator
 cd repomap
 python -m venv .venv
 source .venv/bin/activate
