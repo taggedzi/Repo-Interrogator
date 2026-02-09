@@ -16,6 +16,10 @@ class OutlineSymbol:
     start_line: int
     end_line: int
     doc: str | None
+    parent_symbol: str | None = None
+    scope_kind: str | None = None
+    is_conditional: bool | None = None
+    decl_context: str | None = None
 
 
 class AdapterContractError(ValueError):
@@ -32,6 +36,16 @@ def normalize_signature(signature: str | None) -> str | None:
     return normalized
 
 
+def normalize_optional_text(value: str | None) -> str | None:
+    """Normalize optional text fields to stable string-or-None values."""
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    return normalized
+
+
 def symbol_sort_key(symbol: OutlineSymbol) -> tuple[int, int, str, str]:
     """Return deterministic sort key for outline symbols."""
     return (symbol.start_line, symbol.end_line, symbol.name, symbol.kind)
@@ -39,6 +53,7 @@ def symbol_sort_key(symbol: OutlineSymbol) -> tuple[int, int, str, str]:
 
 def validate_outline_symbols(symbols: list[OutlineSymbol]) -> None:
     """Validate symbols against required invariant fields."""
+    allowed_scope_kinds = {"module", "class", "function"}
     for symbol in symbols:
         if not symbol.kind.strip():
             raise AdapterContractError("Outline symbol kind must be non-empty.")
@@ -48,12 +63,23 @@ def validate_outline_symbols(symbols: list[OutlineSymbol]) -> None:
             raise AdapterContractError("Outline symbol start_line must be >= 1.")
         if symbol.end_line < symbol.start_line:
             raise AdapterContractError("Outline symbol end_line must be >= start_line.")
+        if symbol.scope_kind is not None and symbol.scope_kind not in allowed_scope_kinds:
+            raise AdapterContractError(
+                "Outline symbol scope_kind must be one of module, class, function."
+            )
 
 
 def normalize_and_sort_symbols(symbols: list[OutlineSymbol]) -> list[OutlineSymbol]:
     """Normalize signatures, validate schema invariants, and sort deterministically."""
     normalized = [
-        replace(symbol, signature=normalize_signature(symbol.signature)) for symbol in symbols
+        replace(
+            symbol,
+            signature=normalize_signature(symbol.signature),
+            parent_symbol=normalize_optional_text(symbol.parent_symbol),
+            scope_kind=normalize_optional_text(symbol.scope_kind),
+            decl_context=normalize_optional_text(symbol.decl_context),
+        )
+        for symbol in symbols
     ]
     validate_outline_symbols(normalized)
     return sorted(normalized, key=symbol_sort_key)

@@ -24,6 +24,15 @@ def helper(flag: bool) -> bool:
     assert symbols[0].doc == "Worker class doc."
     assert symbols[1].doc == "Run work."
     assert symbols[2].doc == "Helper function."
+    assert symbols[0].parent_symbol is None
+    assert symbols[0].scope_kind == "module"
+    assert symbols[0].is_conditional is False
+    assert symbols[0].decl_context is None
+    assert symbols[1].parent_symbol == "Worker"
+    assert symbols[1].scope_kind == "class"
+    assert symbols[1].is_conditional is False
+    assert symbols[2].parent_symbol is None
+    assert symbols[2].scope_kind == "module"
     assert symbols[0].start_line < symbols[1].start_line < symbols[2].start_line
     assert symbols[0].end_line >= symbols[1].end_line
 
@@ -75,6 +84,13 @@ def top() -> None:
     assert by_name["Outer.method.Local"].kind == "class"
     assert by_name["Outer.method.Local.run"].kind == "method"
     assert by_name["top.under_nested_if"].kind == "function"
+    assert by_name["under_if"].is_conditional is True
+    assert by_name["under_if"].decl_context == "if"
+    assert by_name["Outer"].is_conditional is False
+    assert by_name["Outer.method.local_fn"].parent_symbol == "Outer.method"
+    assert by_name["Outer.method.local_fn"].scope_kind == "function"
+    assert by_name["top.under_nested_if"].is_conditional is True
+    assert by_name["top.under_nested_if"].decl_context == "if"
 
 
 def test_python_outline_handles_ast_value_error_deterministically() -> None:

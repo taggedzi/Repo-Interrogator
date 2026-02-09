@@ -2,58 +2,86 @@
   "language": "ts_js_lexical",
   "symbols": [
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 9,
+      "is_conditional": null,
       "kind": "class",
       "name": "Worker",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": "()",
       "start_line": 1
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 4,
+      "is_conditional": null,
       "kind": "method",
       "name": "Worker.run",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": "(value)",
       "start_line": 2
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 8,
+      "is_conditional": null,
       "kind": "method",
       "name": "Worker.from",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": "(id)",
       "start_line": 6
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 16,
+      "is_conditional": null,
       "kind": "function",
       "name": "helper",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": "(flag)",
       "start_line": 11
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 18,
+      "is_conditional": null,
       "kind": "exported_variable",
       "name": "helper",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": null,
       "start_line": 18
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 19,
+      "is_conditional": null,
       "kind": "exported_variable",
       "name": "main",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": null,
       "start_line": 19
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 20,
+      "is_conditional": null,
       "kind": "exported_variable",
       "name": "VERSION",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": null,
       "start_line": 20
     }

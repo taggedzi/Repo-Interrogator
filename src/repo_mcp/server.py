@@ -389,6 +389,10 @@ class StdioServer:
                     "start_line": symbol.start_line,
                     "end_line": symbol.end_line,
                     "doc": symbol.doc,
+                    "parent_symbol": symbol.parent_symbol,
+                    "scope_kind": symbol.scope_kind,
+                    "is_conditional": symbol.is_conditional,
+                    "decl_context": symbol.decl_context,
                 }
                 for symbol in symbols
             ],

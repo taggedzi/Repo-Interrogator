@@ -47,6 +47,19 @@ def test_tool_contract_matrix_for_required_v1_tools(tmp_path: Path) -> None:
         if method == "repo.outline":
             assert response["ok"] is True
             assert set(response["result"].keys()) == {"path", "language", "symbols"}
+            assert response["result"]["symbols"]
+            assert set(response["result"]["symbols"][0].keys()) == {
+                "kind",
+                "name",
+                "signature",
+                "start_line",
+                "end_line",
+                "doc",
+                "parent_symbol",
+                "scope_kind",
+                "is_conditional",
+                "decl_context",
+            }
         if method == "repo.build_context_bundle":
             assert response["ok"] is True
             assert set(response["result"].keys()) == {

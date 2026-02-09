@@ -28,6 +28,24 @@ def test_repo_outline_tool_uses_python_adapter(tmp_path: Path) -> None:
     assert result["path"] == "src/mod.py"
     names = [symbol["name"] for symbol in result["symbols"]]
     assert names == ["A", "A.m", "f"]
+    assert set(result["symbols"][0].keys()) == {
+        "kind",
+        "name",
+        "signature",
+        "start_line",
+        "end_line",
+        "doc",
+        "parent_symbol",
+        "scope_kind",
+        "is_conditional",
+        "decl_context",
+    }
+    assert result["symbols"][0]["scope_kind"] == "module"
+    assert result["symbols"][0]["parent_symbol"] is None
+    assert result["symbols"][0]["is_conditional"] is False
+    assert result["symbols"][1]["scope_kind"] == "class"
+    assert result["symbols"][1]["parent_symbol"] == "A"
+    assert result["symbols"][2]["scope_kind"] == "module"
 
 
 def test_repo_outline_tool_uses_lexical_fallback_for_non_python(tmp_path: Path) -> None:

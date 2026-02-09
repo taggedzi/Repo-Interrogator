@@ -2,26 +2,38 @@
   "language": "python",
   "symbols": [
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 3,
+      "is_conditional": false,
       "kind": "class",
       "name": "Service",
+      "parent_symbol": null,
+      "scope_kind": "module",
       "signature": "()",
       "start_line": 1
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 3,
+      "is_conditional": false,
       "kind": "method",
       "name": "Service.run",
+      "parent_symbol": "Service",
+      "scope_kind": "class",
       "signature": "(self, value: int)",
       "start_line": 2
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 7,
+      "is_conditional": false,
       "kind": "function",
       "name": "build",
+      "parent_symbol": null,
+      "scope_kind": "module",
       "signature": "(name: str)",
       "start_line": 6
     }

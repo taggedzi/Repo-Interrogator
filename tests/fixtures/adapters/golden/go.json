@@ -2,66 +2,98 @@
   "language": "go_lexical",
   "symbols": [
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 7,
+      "is_conditional": null,
       "kind": "type",
       "name": "worker.Runner",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": null,
       "start_line": 5
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 11,
+      "is_conditional": null,
       "kind": "type",
       "name": "worker.Service",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": null,
       "start_line": 9
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 14,
+      "is_conditional": null,
       "kind": "const",
       "name": "worker.DefaultName",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": null,
       "start_line": 14
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 15,
+      "is_conditional": null,
       "kind": "const",
       "name": "worker.MaxRetries",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": null,
       "start_line": 15
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 19,
+      "is_conditional": null,
       "kind": "var",
       "name": "worker.GlobalEnabled",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": null,
       "start_line": 19
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 20,
+      "is_conditional": null,
       "kind": "var",
       "name": "worker.globalVersion",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": null,
       "start_line": 20
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 25,
+      "is_conditional": null,
       "kind": "function",
       "name": "worker.Build",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": "(name string)",
       "start_line": 23
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 30,
+      "is_conditional": null,
       "kind": "method",
       "name": "worker.Service.Run",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": "(ctx context.Context)",
       "start_line": 27
     }

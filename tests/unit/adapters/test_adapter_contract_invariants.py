@@ -20,6 +20,10 @@ def test_validate_outline_symbols_accepts_valid_symbol_set() -> None:
             start_line=10,
             end_line=14,
             doc=None,
+            parent_symbol="Api",
+            scope_kind="class",
+            is_conditional=False,
+            decl_context=None,
         )
     ]
 
@@ -73,6 +77,18 @@ def test_validate_outline_symbols_accepts_valid_symbol_set() -> None:
             ),
             "end_line",
         ),
+        (
+            OutlineSymbol(
+                kind="function",
+                name="build",
+                signature=None,
+                start_line=7,
+                end_line=7,
+                doc=None,
+                scope_kind="invalid",
+            ),
+            "scope_kind",
+        ),
     ],
 )
 def test_validate_outline_symbols_rejects_invalid_symbols(
@@ -113,3 +129,27 @@ def test_normalize_and_sort_symbols_normalizes_and_orders() -> None:
 
     assert [item.name for item in normalized] == ["Worker", "Worker.run"]
     assert normalized[1].signature == "(self)"
+
+
+def test_normalize_and_sort_symbols_normalizes_optional_metadata_fields() -> None:
+    symbols = [
+        OutlineSymbol(
+            kind="function",
+            name="A.f",
+            signature="()",
+            start_line=1,
+            end_line=1,
+            doc=None,
+            parent_symbol="  A ",
+            scope_kind=" module ",
+            is_conditional=True,
+            decl_context=" if>try ",
+        )
+    ]
+
+    normalized = normalize_and_sort_symbols(symbols)
+
+    assert normalized[0].parent_symbol == "A"
+    assert normalized[0].scope_kind == "module"
+    assert normalized[0].is_conditional is True
+    assert normalized[0].decl_context == "if>try"

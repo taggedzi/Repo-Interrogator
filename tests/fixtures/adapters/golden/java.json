@@ -2,66 +2,98 @@
   "language": "java_lexical",
   "symbols": [
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 5,
+      "is_conditional": null,
       "kind": "interface",
       "name": "com.example.service.Runner",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": "()",
       "start_line": 3
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 4,
+      "is_conditional": null,
       "kind": "method",
       "name": "com.example.service.Runner.run",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": "(String input)",
       "start_line": 4
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 10,
+      "is_conditional": null,
       "kind": "enum",
       "name": "com.example.service.Mode",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": "()",
       "start_line": 7
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 12,
+      "is_conditional": null,
       "kind": "type",
       "name": "com.example.service.Result",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": "()",
       "start_line": 12
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 28,
+      "is_conditional": null,
       "kind": "class",
       "name": "com.example.service.Service",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": "()",
       "start_line": 14
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 19,
+      "is_conditional": null,
       "kind": "constructor",
       "name": "com.example.service.Service.Service",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": "(String name)",
       "start_line": 17
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 23,
+      "is_conditional": null,
       "kind": "method",
       "name": "com.example.service.Service.run",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": "(String input)",
       "start_line": 21
     },
     {
+      "decl_context": null,
       "doc": null,
       "end_line": 27,
+      "is_conditional": null,
       "kind": "method",
       "name": "com.example.service.Service.parse",
+      "parent_symbol": null,
+      "scope_kind": null,
       "signature": "(int value)",
       "start_line": 25
     }
