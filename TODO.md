@@ -1223,6 +1223,7 @@ Decide whether optional execution of external compilers/toolchains is permitted.
 
 **Acceptance criteria**
 - Explicit human-approved policy recorded (likely default: disallow).
+- Decision recorded in ADR: `docs/adr/ADR-0010-disallow-external-toolchain-integration-for-now.md`.
 
 **Command gates**
 ```bash
