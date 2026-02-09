@@ -24,6 +24,7 @@ from .lexical import (
 from .python import PythonAstAdapter
 from .registry import AdapterRegistry
 from .runtime import build_adapter_registry
+from .rust import RustLexicalAdapter
 from .ts_js import TypeScriptJavaScriptLexicalAdapter
 
 __all__ = [
@@ -37,6 +38,7 @@ __all__ = [
     "LexicalToken",
     "OutlineSymbol",
     "PythonAstAdapter",
+    "RustLexicalAdapter",
     "TypeScriptJavaScriptLexicalAdapter",
     "BraceBlock",
     "BraceScanResult",
