@@ -1252,6 +1252,7 @@ Decide whether adapter output should remain outline-only or also provide chunkin
 
 **Acceptance criteria**
 - Human-approved direction captured before any chunking behavior changes.
+- Decision recorded in ADR: `docs/adr/ADR-0011-outline-only-no-language-aware-chunking-for-now.md`.
 
 **Command gates**
 ```bash
