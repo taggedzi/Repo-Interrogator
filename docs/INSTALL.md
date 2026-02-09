@@ -59,6 +59,7 @@ python -m pip install ruff mypy pytest build
 ```
 
 Notes:
+
 - This project currently has no declared runtime dependencies in `pyproject.toml`.
 - Dev tools (`ruff`, `mypy`, `pytest`, `build`) are installed separately.
 
