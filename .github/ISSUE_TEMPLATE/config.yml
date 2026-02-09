@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability report
+    url: https://github.com/taggedzi/Repo-Interrogator/security/advisories/new
+    about: Please report security vulnerabilities privately.
+  - name: Project security policy
+    url: https://github.com/taggedzi/Repo-Interrogator/blob/main/SECURITY.md
+    about: Review supported versions, reporting guidance, and disclosure policy.

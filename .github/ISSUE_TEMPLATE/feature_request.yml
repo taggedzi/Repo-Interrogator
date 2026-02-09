@@ -1,0 +1,60 @@
+name: Feature request
+description: Propose an enhancement to the project
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please keep requests focused and tied to project goals:
+        deterministic, auditable repository interrogation.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: One-sentence feature request.
+      placeholder: Add deterministic cross-file reference hints for symbols
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What user problem does this solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe expected behavior, API shape, and constraints.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Simpler options or tradeoffs you considered.
+
+  - type: textarea
+    id: spec_alignment
+    attributes:
+      label: SPEC/ADR alignment
+      description: Reference relevant `SPEC.md` sections or ADRs.
+      placeholder: SPEC 10.3, ADR-0012
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints acknowledgement
+      options:
+        - label: This proposal preserves deterministic behavior.
+          required: true
+        - label: This proposal does not require LLM calls in server logic.
+          required: true
+        - label: If this changes tool schemas, I understand SPEC/ADR updates are required.
+          required: true

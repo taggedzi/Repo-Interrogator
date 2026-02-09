@@ -1,0 +1,48 @@
+name: Documentation task
+description: Request doc updates, corrections, or examples
+labels:
+  - documentation
+body:
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: Short description of the documentation need.
+      placeholder: Update repo.outline docs for v2 metadata fields
+    validations:
+      required: true
+
+  - type: textarea
+    id: affected_docs
+    attributes:
+      label: Affected files/sections
+      description: List paths and sections needing updates.
+      placeholder: |
+        - docs/USAGE.md: repo.outline section
+        - docs/AI_INTEGRATION.md: tool selection guidance
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: Current issue
+      description: What's unclear, outdated, or incorrect today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_text
+    attributes:
+      label: Proposed update (optional)
+      description: Suggested wording or examples.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I checked current docs for existing guidance.
+          required: true
+        - label: I included exact file paths/sections to update.
+          required: true
