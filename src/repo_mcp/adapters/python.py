@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ast
 
-from repo_mcp.adapters.base import OutlineSymbol
+from repo_mcp.adapters.base import OutlineSymbol, normalize_and_sort_symbols, normalize_signature
 
 
 class PythonAstAdapter:
@@ -34,8 +34,7 @@ class PythonAstAdapter:
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 symbols.append(self._function_symbol(node))
 
-        symbols.sort(key=lambda item: (item.start_line, item.name, item.kind))
-        return symbols
+        return normalize_and_sort_symbols(symbols)
 
     def smart_chunks(self, path: str, text: str) -> list[tuple[int, int]] | None:
         """Python v1 does not provide smart chunk ranges yet."""
@@ -50,7 +49,7 @@ class PythonAstAdapter:
 
     def _class_symbol(self, node: ast.ClassDef) -> OutlineSymbol:
         bases = ", ".join(ast.unparse(base) for base in node.bases) if node.bases else ""
-        signature = f"({bases})" if bases else "()"
+        signature = normalize_signature(f"({bases})" if bases else "()")
         return OutlineSymbol(
             kind="class",
             name=node.name,
@@ -62,7 +61,7 @@ class PythonAstAdapter:
 
     def _function_symbol(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> OutlineSymbol:
         kind = "async_function" if isinstance(node, ast.AsyncFunctionDef) else "function"
-        signature = f"({ast.unparse(node.args)})"
+        signature = normalize_signature(f"({ast.unparse(node.args)})")
         return OutlineSymbol(
             kind=kind,
             name=node.name,
@@ -78,7 +77,7 @@ class PythonAstAdapter:
         class_name: str,
     ) -> OutlineSymbol:
         kind = "async_method" if isinstance(node, ast.AsyncFunctionDef) else "method"
-        signature = f"({ast.unparse(node.args)})"
+        signature = normalize_signature(f"({ast.unparse(node.args)})")
         return OutlineSymbol(
             kind=kind,
             name=f"{class_name}.{node.name}",

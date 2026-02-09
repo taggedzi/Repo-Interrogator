@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TextIO
 
 from repo_mcp.adapters import AdapterRegistry, build_adapter_registry
+from repo_mcp.adapters.base import normalize_and_sort_symbols
 from repo_mcp.bundler import BundleBudget, BundleResult, build_context_bundle
 from repo_mcp.config import CliOverrides, ServerConfig, load_effective_config
 from repo_mcp.index import IndexManager, IndexSchemaUnsupportedError
@@ -376,7 +377,7 @@ class StdioServer:
         relative_path = resolved.relative_to(self._repo_root).as_posix()
         text = resolved.read_text(encoding="utf-8", errors="replace")
         adapter = self._adapters.select(relative_path)
-        symbols = adapter.outline(relative_path, text)
+        symbols = normalize_and_sort_symbols(adapter.outline(relative_path, text))
         return {
             "path": relative_path,
             "language": adapter.name,
