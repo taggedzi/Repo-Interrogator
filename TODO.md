@@ -703,3 +703,657 @@ Implement Step 24 only from TODO.md.
 - All tool contracts stable and documented.
 - Determinism/security invariants validated by unit + integration suites.
 - CI and release workflows operational with reproducible artifacts.
+
+---
+
+## 8) Language Adapter Expansion Track (TS/JS/Java/Go/Rust/C++/C#)
+
+### Overview
+
+This expansion track adds multi-language outline support through the existing plugin adapter system without changing core transport, sandboxing, or deterministic guarantees.
+
+- Keep MCP transport STDIO-only.
+- Keep server passive and interrogative (no LLM usage).
+- Keep security and path policy in core; adapters must never bypass policy.
+- Keep deterministic ordering and stable output schemas.
+- Start with zero new runtime dependencies using lexical outlines for all target languages.
+- Treat enhanced parser-based approaches as optional follow-on work behind explicit decision gates.
+
+### Prerequisites
+
+- Baseline TODO steps through Step 24 are complete and passing.
+- Adapter registry and fallback behavior from Steps 12-13 are stable.
+- `repo.outline` and bundler integration behavior from Steps 13, 16, and 17 are stable.
+
+### Adapter interface expectations (applies to every new adapter)
+
+- `supports_path(path: str) -> bool`:
+  - deterministic extension-based detection only.
+- `outline(path: str, content: str) -> OutlineResult`:
+  - stable schema and deterministic ordering.
+  - output symbols must include: `name`, `kind`, `start_line`, `end_line`.
+  - include `signature` when feasible and deterministic.
+- Optional `chunking_hints(...)` (if enabled later):
+  - must be deterministic and additive; core chunker remains authoritative.
+- Deterministic ordering rules:
+  - sort by `start_line`, then `end_line`, then `name`, then `kind`.
+  - no dependence on hash iteration or platform file ordering.
+- Stable schema rules:
+  - language identifier is explicit.
+  - missing data must be explicit (`null`/empty), never inferred nondeterministically.
+
+### Language detection and outline strategy matrix
+
+- TypeScript
+  - Extensions: `.ts`, `.tsx`, `.mts`, `.cts`.
+  - Lexical first: classes, interfaces, enums, type aliases, functions, exported const/let/var, methods.
+  - Enhanced option (gated): TypeScript compiler API, tree-sitter, or lightweight parser.
+  - Edge cases: decorators, overload signatures, namespace merges, JSX/TSX ambiguity.
+- JavaScript
+  - Extensions: `.js`, `.jsx`, `.mjs`, `.cjs`.
+  - Lexical first: function declarations, class declarations, methods, exports (`export`, `module.exports`, `exports.*`).
+  - Enhanced option (gated): tree-sitter or parser package.
+  - Edge cases: dynamic exports, prototype assignments, class fields.
+- Java
+  - Extensions: `.java`.
+  - Lexical first: package/import, classes/interfaces/enums/records, methods, constructors.
+  - Enhanced option (gated): `javalang` or tree-sitter.
+  - Edge cases: nested/anonymous classes, annotations, generics and bounds.
+- Go
+  - Extensions: `.go`.
+  - Lexical first: package, type declarations, funcs/methods (receiver forms), const/var groups.
+  - Enhanced option (gated): external `go` toolchain parsing.
+  - Edge cases: grouped declarations, receiver syntax variants, build tags.
+- Rust
+  - Extensions: `.rs`.
+  - Lexical first: `mod`, `struct`, `enum`, `trait`, `impl`, `fn`, `const`, `type`.
+  - Enhanced option (gated): tree-sitter or external tooling.
+  - Edge cases: macro-generated items, impl blocks with where clauses, trait impl methods.
+- C++
+  - Extensions: `.cpp`, `.cc`, `.cxx`, `.hpp`, `.hh`, `.hxx`, `.h`.
+  - Lexical first: namespaces, classes/structs/enums, free functions, methods where recognizable.
+  - Enhanced option (gated): tree-sitter or libclang-based approach.
+  - Edge cases: templates, macros, function pointer syntax, declarations vs definitions.
+- C#
+  - Extensions: `.cs`.
+  - Lexical first: namespaces, classes/structs/interfaces/enums/records, methods/properties/events.
+  - Enhanced option (gated): tree-sitter or Roslyn-based external tooling.
+  - Edge cases: partial classes, attributes, expression-bodied members, top-level statements.
+
+### Expansion-specific Decision Gates (STOP and ask human before proceeding)
+
+1. **Tree-sitter adoption for multi-language parsing**
+   - Pros: broad language coverage, better structural accuracy.
+   - Cons: dependency/runtime portability burden, parser version management, fixture drift risk.
+2. **Optional external toolchain integration**
+   - Consider `go`, `javac`, `clang`, `rustc`, or similar.
+   - Default should remain no external executables to preserve hermetic deterministic behavior.
+3. **Outline-only vs language-aware chunking hints**
+   - Decide whether lexical/parsing improvements should remain outline-only or also influence chunk selection.
+
+## M5 - Multi-language lexical adapter baseline (zero new runtime deps)
+
+### Step 25 - Adapter contract hardening for multi-language support
+
+**Goal**  
+Finalize adapter contract semantics and shared deterministic ordering helpers before adding new language adapters.
+
+**Required changes**
+- Codify adapter output schema invariants shared by all adapters.
+- Add reusable symbol sorting helper and signature normalization utility.
+- Document optional `chunking_hints` as not required for baseline.
+
+**Tests to add/update**
+- `tests/unit/adapters/test_adapter_contract_invariants.py`
+- `tests/unit/adapters/test_symbol_ordering_rules.py`
+
+**Acceptance criteria**
+- All adapters conform to the same symbol schema and ordering rules.
+- Contract tests fail on missing required symbol fields.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 25 only from TODO.md.
+```
+
+### Step 26 - Shared lexical outline utilities
+
+**Goal**  
+Create deterministic lexical scanning utilities reusable by all new language adapters.
+
+**Required changes**
+- Add shared token/comment/string skipping helpers.
+- Add brace and block tracking utilities with deterministic line accounting.
+- Add safe fallback behavior for malformed source.
+
+**Tests to add/update**
+- `tests/unit/adapters/test_lexical_scanner_basics.py`
+- `tests/unit/adapters/test_lexical_scanner_edge_cases.py`
+
+**Acceptance criteria**
+- Scanner behavior is deterministic and independent of platform.
+- Utilities never execute external tools or parse via network calls.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 26 only from TODO.md.
+```
+
+### Step 27 - TypeScript and JavaScript lexical adapters
+
+**Goal**  
+Add deterministic lexical outline adapters for TS/JS with export-aware symbol extraction.
+
+**Required changes**
+- Add extension detection for TS/JS families.
+- Extract top-level symbols: classes, interfaces, enums, type aliases, functions, exported bindings, methods where deterministic.
+- Populate stable ranges and signatures where feasible.
+- Register adapters in plugin registry without changing core server behavior.
+
+**Tests to add/update**
+- `tests/unit/adapters/test_ts_outline_lexical.py`
+- `tests/unit/adapters/test_js_outline_lexical.py`
+- Golden fixtures under `tests/fixtures/adapters/ts_js/`.
+
+**Acceptance criteria**
+- TS/JS files select the correct adapter deterministically.
+- Output symbol ordering and ranges are stable across repeated runs.
+- Unknown or ambiguous constructs degrade to safe minimal symbols, not errors.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 27 only from TODO.md.
+```
+
+### Step 28 - Java lexical adapter
+
+**Goal**  
+Add deterministic lexical outline adapter for Java source.
+
+**Required changes**
+- Detect `.java` files.
+- Extract package-aware top-level symbols: classes/interfaces/enums/records and methods/constructors.
+- Emit stable ranges and signatures where feasible.
+- Document unsupported constructs in adapter docstring/tests.
+
+**Tests to add/update**
+- `tests/unit/adapters/test_java_outline_lexical.py`
+- Golden fixtures under `tests/fixtures/adapters/java/`.
+
+**Acceptance criteria**
+- Java outlines are deterministic and schema-compliant.
+- Nested/anonymous complexity does not break output stability.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 28 only from TODO.md.
+```
+
+### Step 29 - Go lexical adapter
+
+**Goal**  
+Add deterministic lexical outline adapter for Go without invoking external toolchains.
+
+**Required changes**
+- Detect `.go` files.
+- Extract package-level symbols: types, funcs, methods, const/var blocks.
+- Handle receiver signatures lexically where deterministic.
+- Explicitly avoid `go` executable usage in baseline.
+
+**Tests to add/update**
+- `tests/unit/adapters/test_go_outline_lexical.py`
+- Golden fixtures under `tests/fixtures/adapters/go/`.
+
+**Acceptance criteria**
+- Go outlines are deterministic with stable ranges.
+- Adapter never shells out to `go` or external binaries.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 29 only from TODO.md.
+```
+
+### Step 30 - Rust lexical adapter
+
+**Goal**  
+Add deterministic lexical outline adapter for Rust.
+
+**Required changes**
+- Detect `.rs` files.
+- Extract symbols: `mod`, `struct`, `enum`, `trait`, `impl`, `fn`, `const`, `type`.
+- Represent impl methods with stable naming convention where feasible.
+- Document macro-related limitations.
+
+**Tests to add/update**
+- `tests/unit/adapters/test_rust_outline_lexical.py`
+- Golden fixtures under `tests/fixtures/adapters/rust/`.
+
+**Acceptance criteria**
+- Rust outline is deterministic for fixed input.
+- Macro-heavy files degrade gracefully with explicit limitations.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 30 only from TODO.md.
+```
+
+### Step 31 - C++ lexical adapter
+
+**Goal**  
+Add deterministic lexical outline adapter for C++/headers.
+
+**Required changes**
+- Detect canonical C/C++ extensions in scope.
+- Extract namespaces, classes/structs/enums, and functions/methods where deterministic.
+- Handle declaration/definition ambiguity with conservative symbol emission.
+- Document template/macro limitations explicitly.
+
+**Tests to add/update**
+- `tests/unit/adapters/test_cpp_outline_lexical.py`
+- Golden fixtures under `tests/fixtures/adapters/cpp/`.
+
+**Acceptance criteria**
+- C++ outline output remains stable even on partially ambiguous syntax.
+- Adapter avoids heuristic randomness and external tooling.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 31 only from TODO.md.
+```
+
+### Step 32 - C# lexical adapter
+
+**Goal**  
+Add deterministic lexical outline adapter for C#.
+
+**Required changes**
+- Detect `.cs` files.
+- Extract symbols: namespaces, classes/structs/interfaces/enums/records, methods/properties/events when feasible.
+- Include stable signature fragments for methods and constructors.
+- Document partial class and attribute limitations.
+
+**Tests to add/update**
+- `tests/unit/adapters/test_csharp_outline_lexical.py`
+- Golden fixtures under `tests/fixtures/adapters/csharp/`.
+
+**Acceptance criteria**
+- C# outlines are deterministic with stable ordering and ranges.
+- Unsupported syntax is handled conservatively, not with speculative parsing.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 32 only from TODO.md.
+```
+
+### Step 33 - Adapter selection integration and `repo.outline` coverage
+
+**Goal**  
+Ensure `repo.outline` consistently selects the new adapters and falls back cleanly.
+
+**Required changes**
+- Update registry wiring and deterministic selection precedence.
+- Ensure unsupported files still use fallback adapter.
+- Add integration checks for all supported language extensions.
+
+**Tests to add/update**
+- `tests/integration/test_repo_outline_multilanguage_selection.py`
+- `tests/unit/adapters/test_registry_selection_multilanguage.py`
+
+**Acceptance criteria**
+- `repo.outline` picks expected adapter by path extension.
+- Fallback behavior remains deterministic and unchanged for unknown types.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 33 only from TODO.md.
+```
+
+### Step 34 - Context bundler integration with non-Python outlines
+
+**Goal**  
+Ensure bundler uses outline metadata when available for any adapter, with deterministic fallback.
+
+**Required changes**
+- Generalize bundler outline consumption to adapter-agnostic symbols.
+- Keep existing budget and citation rules unchanged.
+- Add explicit fallback path when outline symbols are empty.
+
+**Tests to add/update**
+- `tests/unit/bundler/test_multilanguage_outline_consumption.py`
+- `tests/integration/test_bundle_with_non_python_outline.py`
+
+**Acceptance criteria**
+- Bundler behavior remains deterministic across supported languages.
+- Citations and rationale remain complete and schema-stable.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 34 only from TODO.md.
+```
+
+### Step 35 - Golden fixtures and determinism hardening for all adapters
+
+**Goal**  
+Add comprehensive fixtures and determinism tests for multi-language adapter outputs.
+
+**Required changes**
+- Add minimal golden fixtures per language with expected symbol JSON snapshots.
+- Add repeat-run determinism assertions for order, ranges, and signatures.
+- Add cross-platform path normalization checks in multilingual contexts.
+
+**Tests to add/update**
+- `tests/unit/adapters/test_multilanguage_golden_snapshots.py`
+- `tests/integration/test_multilanguage_outline_determinism.py`
+
+**Acceptance criteria**
+- Golden tests are deterministic and self-contained.
+- No test requires network or external compilers.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 35 only from TODO.md.
+```
+
+### Step 36 - Documentation updates for language support and limitations
+
+**Goal**  
+Update docs to describe language coverage, lexical limitations, and deterministic guarantees.
+
+**Required changes**
+- Update `README.md` support matrix for language adapters.
+- Update usage docs for `repo.outline` with multilingual examples.
+- Document limitations and edge-case behavior per language.
+
+**Tests to add/update**
+- Add/adjust doc consistency tests if present.
+
+**Acceptance criteria**
+- Supported extensions and limitations are documented accurately.
+- Docs do not claim parser/toolchain features not implemented.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 36 only from TODO.md.
+```
+
+## M6 - Optional enhanced parsing (gated, post-baseline)
+
+### Step 37 - STOP: tree-sitter adoption decision gate
+
+**Goal**  
+Decide whether to adopt tree-sitter as a shared enhanced parser dependency.
+
+**Required changes**
+- Do not implement parser integration in this step.
+- Prepare decision memo with:
+  - dependency footprint and licenses,
+  - reproducibility and portability impacts,
+  - determinism and maintenance tradeoffs.
+
+**Tests to add/update**
+- None (decision checkpoint).
+
+**Acceptance criteria**
+- Human decision captured explicitly with go/no-go.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 37 only from TODO.md. This is a STOP-and-ask decision gate; collect the decision and do not proceed to Step 38 without explicit approval.
+```
+
+### Step 38 - STOP: external toolchain integration decision gate (Go/Java/C++/Rust/C#)
+
+**Goal**  
+Decide whether optional execution of external compilers/toolchains is permitted.
+
+**Required changes**
+- Do not implement external execution in this step.
+- Document tradeoffs:
+  - hermeticity and reproducibility risk,
+  - security/sandbox surface increase,
+  - platform/toolchain availability complexity.
+
+**Tests to add/update**
+- None (decision checkpoint).
+
+**Acceptance criteria**
+- Explicit human-approved policy recorded (likely default: disallow).
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 38 only from TODO.md. This is a STOP-and-ask decision gate; collect the decision and do not proceed to Step 39 without explicit approval.
+```
+
+### Step 39 - STOP: outline-only vs language-aware chunking decision gate
+
+**Goal**  
+Decide whether adapter output should remain outline-only or also provide chunking hints.
+
+**Required changes**
+- Do not implement chunking changes in this step.
+- Record impact analysis on deterministic chunk IDs and backward compatibility.
+
+**Tests to add/update**
+- None (decision checkpoint).
+
+**Acceptance criteria**
+- Human-approved direction captured before any chunking behavior changes.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 39 only from TODO.md. This is a STOP-and-ask decision gate; collect the decision and do not proceed to Step 40 without explicit approval.
+```
+
+### Step 40 - Optional enhanced TS/JS parsing (only if approved)
+
+**Goal**  
+Implement approved enhanced parser path for TS/JS behind explicit config gating.
+
+**Required changes**
+- Add parser-backed outline path for TS/JS if approved dependency exists.
+- Keep lexical adapter as deterministic fallback.
+- Add explicit configuration toggle defaulting to lexical mode.
+
+**Tests to add/update**
+- `tests/unit/adapters/test_ts_js_enhanced_mode.py`
+- Determinism parity tests between lexical and enhanced fallbacks.
+
+**Acceptance criteria**
+- Enhanced mode is opt-in and deterministic.
+- No behavior change for default lexical mode.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 40 only from TODO.md, and only if Step 37 approval is explicitly recorded.
+```
+
+### Step 41 - Optional enhanced Java parsing (only if approved)
+
+**Goal**  
+Implement approved enhanced Java parsing path behind explicit config gating.
+
+**Required changes**
+- Add parser-backed Java outline path if approved.
+- Preserve lexical fallback as default-safe path.
+- Document parser-specific limitations and version constraints.
+
+**Tests to add/update**
+- `tests/unit/adapters/test_java_enhanced_mode.py`
+
+**Acceptance criteria**
+- Default behavior remains lexical and deterministic.
+- Enhanced mode is controlled and reproducible.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 41 only from TODO.md, and only if Step 37 approval is explicitly recorded.
+```
+
+### Step 42 - Optional enhanced Go/Rust/C++/C# parsing (only if approved)
+
+**Goal**  
+Implement approved enhanced parsing path for Go/Rust/C++/C# with strict gating and fallback.
+
+**Required changes**
+- Add approved parser/tooling integration for selected languages.
+- Keep lexical mode as default and mandatory fallback.
+- If external executables are approved, enforce explicit opt-in and deterministic invocation constraints.
+
+**Tests to add/update**
+- `tests/unit/adapters/test_go_enhanced_mode.py`
+- `tests/unit/adapters/test_rust_enhanced_mode.py`
+- `tests/unit/adapters/test_cpp_enhanced_mode.py`
+- `tests/unit/adapters/test_csharp_enhanced_mode.py`
+
+**Acceptance criteria**
+- No change to default lexical behavior.
+- Enhanced paths are deterministic under approved policy and fully tested.
+
+**Command gates**
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m mypy src
+python -m pytest -q
+```
+
+**Prompt**
+```text
+Implement Step 42 only from TODO.md, and only if Steps 37-39 approvals are explicitly recorded.
+```
