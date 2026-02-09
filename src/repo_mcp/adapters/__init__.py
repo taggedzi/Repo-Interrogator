@@ -10,6 +10,7 @@ from .base import (
     validate_outline_symbols,
 )
 from .fallback import LexicalFallbackAdapter
+from .go import GoLexicalAdapter
 from .java import JavaLexicalAdapter
 from .lexical import (
     BraceBlock,
@@ -30,6 +31,7 @@ __all__ = [
     "AdapterContractError",
     "LanguageAdapter",
     "LexicalFallbackAdapter",
+    "GoLexicalAdapter",
     "JavaLexicalAdapter",
     "LexicalRules",
     "LexicalToken",
