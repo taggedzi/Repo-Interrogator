@@ -32,3 +32,52 @@ def test_python_outline_handles_syntax_errors_deterministically() -> None:
     adapter = PythonAstAdapter()
     symbols = adapter.outline("broken.py", "def broken(:\n pass\n")
     assert symbols == []
+
+
+def test_python_outline_includes_nested_and_conditional_declarations() -> None:
+    source = """
+if True:
+    def under_if() -> None:
+        pass
+
+class Outer:
+    def method(self) -> None:
+        def local_fn() -> None:
+            pass
+
+        class Local:
+            def run(self) -> None:
+                pass
+
+def top() -> None:
+    if False:
+        def under_nested_if() -> None:
+            pass
+"""
+    adapter = PythonAstAdapter()
+    symbols = adapter.outline("nested.py", source)
+
+    expected_names = [
+        "under_if",
+        "Outer",
+        "Outer.method",
+        "Outer.method.local_fn",
+        "Outer.method.Local",
+        "Outer.method.Local.run",
+        "top",
+        "top.under_nested_if",
+    ]
+    assert [symbol.name for symbol in symbols] == expected_names
+
+    by_name = {symbol.name: symbol for symbol in symbols}
+    assert by_name["Outer.method"].kind == "method"
+    assert by_name["Outer.method.local_fn"].kind == "function"
+    assert by_name["Outer.method.Local"].kind == "class"
+    assert by_name["Outer.method.Local.run"].kind == "method"
+    assert by_name["top.under_nested_if"].kind == "function"
+
+
+def test_python_outline_handles_ast_value_error_deterministically() -> None:
+    adapter = PythonAstAdapter()
+    symbols = adapter.outline("nul.py", "def ok():\n    pass\0\n")
+    assert symbols == []

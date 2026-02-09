@@ -20,3 +20,14 @@ def build(name: str, *, force: bool = False) -> str:
     assert by_name["Service.run"].signature == "(self, item: str, retries: int=2)"
     assert by_name["build"].signature == "(name: str, *, force: bool=False)"
     assert by_name["Service.run"].kind == "async_method"
+
+
+def test_python_outline_class_signature_includes_keywords() -> None:
+    source = """
+class Service(Base, metaclass=Meta):
+    pass
+"""
+    adapter = PythonAstAdapter()
+    symbols = adapter.outline("svc.py", source)
+    by_name = {symbol.name: symbol for symbol in symbols}
+    assert by_name["Service"].signature == "(Base, metaclass=Meta)"
