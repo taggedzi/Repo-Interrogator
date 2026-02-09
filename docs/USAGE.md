@@ -173,7 +173,17 @@ Request:
 Result fields:
 - `path`
 - `language` (adapter name)
-- `symbols` (kind, name, signature, start_line, end_line, doc)
+- `symbols`:
+  - `kind`
+  - `name`
+  - `signature`
+  - `start_line`
+  - `end_line`
+  - `doc`
+  - `parent_symbol` (optional v2 metadata)
+  - `scope_kind` (optional v2 metadata: `module` | `class` | `function`)
+  - `is_conditional` (optional v2 metadata)
+  - `decl_context` (optional v2 metadata)
 
 Current language values:
 - `python`
@@ -198,8 +208,9 @@ C# example:
 ```
 
 Notes:
-- Python uses AST parsing.
+- Python uses AST parsing and includes nested/conditional declarations as syntactic facts.
 - Non-Python adapters are lexical and conservative by design.
+- `repo.outline` is declaration-based and deterministic; runtime branch truth is not evaluated.
 - `repo.outline` can work even when file extensions are not indexed for search.
 
 ## `repo.refresh_index`

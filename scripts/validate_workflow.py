@@ -327,6 +327,68 @@ class WorkflowValidator:
             expected="result has path/language/symbols",
             actual=self._result_keys(result),
         )
+        symbols = result.get("symbols")
+        self._assert_true(
+            "outline.symbols_type",
+            isinstance(symbols, list),
+            "repo.outline result.symbols should be a list.",
+            expected="symbols is list",
+            actual=f"symbols type={type(symbols).__name__}",
+        )
+        if not isinstance(symbols, list):
+            return
+
+        required_symbol_keys = {
+            "kind",
+            "name",
+            "signature",
+            "start_line",
+            "end_line",
+            "doc",
+            "parent_symbol",
+            "scope_kind",
+            "is_conditional",
+            "decl_context",
+        }
+        symbols_have_v2_shape = True
+        invalid_scope_values: list[str] = []
+        missing_parent_for_class_scope = 0
+
+        for symbol in symbols:
+            if not isinstance(symbol, dict):
+                symbols_have_v2_shape = False
+                continue
+            if not required_symbol_keys.issubset(symbol.keys()):
+                symbols_have_v2_shape = False
+                continue
+
+            scope_kind = symbol.get("scope_kind")
+            if scope_kind not in {None, "module", "class", "function"}:
+                invalid_scope_values.append(str(scope_kind))
+            if scope_kind == "class" and symbol.get("parent_symbol") is None:
+                missing_parent_for_class_scope += 1
+
+        self._assert_true(
+            "outline.v2_symbol_fields",
+            symbols_have_v2_shape,
+            "repo.outline symbols should include v2 metadata fields.",
+            expected=f"every symbol has keys {sorted(required_symbol_keys)}",
+            actual=f"symbols_count={len(symbols)}",
+        )
+        self._assert_true(
+            "outline.scope_kind_values",
+            not invalid_scope_values,
+            "repo.outline symbol scope_kind values should be valid when present.",
+            expected="scope_kind is one of null/module/class/function",
+            actual=f"invalid values={sorted(set(invalid_scope_values))}",
+        )
+        self._assert_true(
+            "outline.class_parent_consistency",
+            missing_parent_for_class_scope == 0,
+            "Class-scope symbols should provide parent_symbol.",
+            expected="class-scope symbols have non-null parent_symbol",
+            actual=f"missing_parent_count={missing_parent_for_class_scope}",
+        )
 
     def _step_bundle(self) -> None:
         req_id = "wf-6-bundle"
@@ -395,7 +457,6 @@ class WorkflowValidator:
             "repo.open_file",
             "repo.outline",
             "repo.build_context_bundle",
-            "repo.audit_log",
         }
         seen_tools = set()
         if isinstance(entries, list):
@@ -408,7 +469,7 @@ class WorkflowValidator:
         self._assert_true(
             "audit.tool_coverage",
             not missing,
-            "Audit log should include all workflow tool calls.",
+            "Audit log should include prior workflow tool calls.",
             expected=f"contains tools {sorted(expected_tools)}",
             actual=f"missing={missing}, seen={sorted(seen_tools)}",
         )

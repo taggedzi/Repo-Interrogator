@@ -120,9 +120,18 @@ A practical order:
 2. `repo.refresh_index` if index is stale or not built.
 3. `repo.search` to locate relevant files/ranges.
 4. `repo.open_file` for exact lines.
-5. `repo.outline` for Python structure.
+5. `repo.outline` for declaration structure (Python AST + lexical adapters).
 6. `repo.build_context_bundle` when you need compact cited context.
 7. `repo.audit_log` for diagnostics and verification.
+
+When using `repo.outline`, each symbol includes:
+- `kind`, `name`, `signature`, `start_line`, `end_line`, `doc`
+- optional v2 metadata: `parent_symbol`, `scope_kind`, `is_conditional`, `decl_context`
+
+Interpretation notes:
+- Outline output is declaration-based and deterministic.
+- Python includes nested and conditional declarations as syntactic facts.
+- Runtime branch truth is not evaluated.
 
 ## How to interpret and use results safely
 
