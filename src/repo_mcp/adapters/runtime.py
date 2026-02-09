@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from repo_mcp.adapters.cpp import CppLexicalAdapter
+from repo_mcp.adapters.csharp import CSharpLexicalAdapter
 from repo_mcp.adapters.fallback import LexicalFallbackAdapter
 from repo_mcp.adapters.go import GoLexicalAdapter
 from repo_mcp.adapters.java import JavaLexicalAdapter
@@ -18,6 +19,7 @@ def build_adapter_registry(config: ServerConfig) -> AdapterRegistry:
     registry = AdapterRegistry()
     if config.adapters.python_enabled:
         registry.register(PythonAstAdapter())
+    registry.register(CSharpLexicalAdapter())
     registry.register(CppLexicalAdapter())
     registry.register(GoLexicalAdapter())
     registry.register(JavaLexicalAdapter())

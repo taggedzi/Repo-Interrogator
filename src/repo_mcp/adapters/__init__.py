@@ -10,6 +10,7 @@ from .base import (
     validate_outline_symbols,
 )
 from .cpp import CppLexicalAdapter
+from .csharp import CSharpLexicalAdapter
 from .fallback import LexicalFallbackAdapter
 from .go import GoLexicalAdapter
 from .java import JavaLexicalAdapter
@@ -32,6 +33,7 @@ __all__ = [
     "AdapterRegistry",
     "AdapterContractError",
     "CppLexicalAdapter",
+    "CSharpLexicalAdapter",
     "LanguageAdapter",
     "LexicalFallbackAdapter",
     "GoLexicalAdapter",
