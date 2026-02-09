@@ -18,6 +18,18 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+dev = [
+  "build>=1.2.2",
+  "mypy>=1.10",
+  "pytest>=8.2",
+  "ruff>=0.5",
+]
+release = [
+  "build>=1.2.2",
+  "twine>=5.1",
+]
+
 [project.scripts]
 repo-mcp = "repo_mcp.server:main"
 
@@ -46,4 +58,3 @@ files = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-
