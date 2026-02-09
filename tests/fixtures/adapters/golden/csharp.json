@@ -1,0 +1,93 @@
+{
+  "language": "csharp_lexical",
+  "symbols": [
+    {
+      "doc": null,
+      "end_line": 1,
+      "kind": "namespace",
+      "name": "Acme.Tools",
+      "signature": null,
+      "start_line": 1
+    },
+    {
+      "doc": null,
+      "end_line": 6,
+      "kind": "interface",
+      "name": "Acme.Tools.IRunner",
+      "signature": "()",
+      "start_line": 3
+    },
+    {
+      "doc": null,
+      "end_line": 5,
+      "kind": "method",
+      "name": "Acme.Tools.IRunner.Run",
+      "signature": "(string input)",
+      "start_line": 5
+    },
+    {
+      "doc": null,
+      "end_line": 12,
+      "kind": "enum",
+      "name": "Acme.Tools.Mode",
+      "signature": "()",
+      "start_line": 8
+    },
+    {
+      "doc": null,
+      "end_line": 14,
+      "kind": "record",
+      "name": "Acme.Tools.Result",
+      "signature": "()",
+      "start_line": 14
+    },
+    {
+      "doc": null,
+      "end_line": 36,
+      "kind": "class",
+      "name": "Acme.Tools.Service",
+      "signature": "()",
+      "start_line": 16
+    },
+    {
+      "doc": null,
+      "end_line": 18,
+      "kind": "property",
+      "name": "Acme.Tools.Service.Name",
+      "signature": null,
+      "start_line": 18
+    },
+    {
+      "doc": null,
+      "end_line": 20,
+      "kind": "event",
+      "name": "Acme.Tools.Service.Changed",
+      "signature": null,
+      "start_line": 20
+    },
+    {
+      "doc": null,
+      "end_line": 25,
+      "kind": "constructor",
+      "name": "Acme.Tools.Service.Service",
+      "signature": "(string name)",
+      "start_line": 22
+    },
+    {
+      "doc": null,
+      "end_line": 30,
+      "kind": "method",
+      "name": "Acme.Tools.Service.RunAsync",
+      "signature": "(string input)",
+      "start_line": 27
+    },
+    {
+      "doc": null,
+      "end_line": 35,
+      "kind": "method",
+      "name": "Acme.Tools.Service.Build",
+      "signature": "(string name)",
+      "start_line": 32
+    }
+  ]
+}

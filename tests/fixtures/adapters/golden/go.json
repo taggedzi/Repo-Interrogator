@@ -1,0 +1,69 @@
+{
+  "language": "go_lexical",
+  "symbols": [
+    {
+      "doc": null,
+      "end_line": 7,
+      "kind": "type",
+      "name": "worker.Runner",
+      "signature": null,
+      "start_line": 5
+    },
+    {
+      "doc": null,
+      "end_line": 11,
+      "kind": "type",
+      "name": "worker.Service",
+      "signature": null,
+      "start_line": 9
+    },
+    {
+      "doc": null,
+      "end_line": 14,
+      "kind": "const",
+      "name": "worker.DefaultName",
+      "signature": null,
+      "start_line": 14
+    },
+    {
+      "doc": null,
+      "end_line": 15,
+      "kind": "const",
+      "name": "worker.MaxRetries",
+      "signature": null,
+      "start_line": 15
+    },
+    {
+      "doc": null,
+      "end_line": 19,
+      "kind": "var",
+      "name": "worker.GlobalEnabled",
+      "signature": null,
+      "start_line": 19
+    },
+    {
+      "doc": null,
+      "end_line": 20,
+      "kind": "var",
+      "name": "worker.globalVersion",
+      "signature": null,
+      "start_line": 20
+    },
+    {
+      "doc": null,
+      "end_line": 25,
+      "kind": "function",
+      "name": "worker.Build",
+      "signature": "(name string)",
+      "start_line": 23
+    },
+    {
+      "doc": null,
+      "end_line": 30,
+      "kind": "method",
+      "name": "worker.Service.Run",
+      "signature": "(ctx context.Context)",
+      "start_line": 27
+    }
+  ]
+}

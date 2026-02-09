@@ -1,0 +1,29 @@
+{
+  "language": "python",
+  "symbols": [
+    {
+      "doc": null,
+      "end_line": 3,
+      "kind": "class",
+      "name": "Service",
+      "signature": "()",
+      "start_line": 1
+    },
+    {
+      "doc": null,
+      "end_line": 3,
+      "kind": "method",
+      "name": "Service.run",
+      "signature": "(self, value: int)",
+      "start_line": 2
+    },
+    {
+      "doc": null,
+      "end_line": 7,
+      "kind": "function",
+      "name": "build",
+      "signature": "(name: str)",
+      "start_line": 6
+    }
+  ]
+}

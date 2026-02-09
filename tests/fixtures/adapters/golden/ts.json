@@ -1,0 +1,77 @@
+{
+  "language": "ts_js_lexical",
+  "symbols": [
+    {
+      "doc": null,
+      "end_line": 3,
+      "kind": "interface",
+      "name": "Runner",
+      "signature": "()",
+      "start_line": 1
+    },
+    {
+      "doc": null,
+      "end_line": 8,
+      "kind": "enum",
+      "name": "Mode",
+      "signature": "()",
+      "start_line": 5
+    },
+    {
+      "doc": null,
+      "end_line": 10,
+      "kind": "type_alias",
+      "name": "Result",
+      "signature": null,
+      "start_line": 10
+    },
+    {
+      "doc": null,
+      "end_line": 24,
+      "kind": "class",
+      "name": "Service",
+      "signature": "()",
+      "start_line": 14
+    },
+    {
+      "doc": null,
+      "end_line": 15,
+      "kind": "method",
+      "name": "Service.constructor",
+      "signature": "(private readonly name: string)",
+      "start_line": 15
+    },
+    {
+      "doc": null,
+      "end_line": 19,
+      "kind": "async_method",
+      "name": "Service.run",
+      "signature": "(input: string)",
+      "start_line": 17
+    },
+    {
+      "doc": null,
+      "end_line": 23,
+      "kind": "method",
+      "name": "Service.format",
+      "signature": "(value: string)",
+      "start_line": 21
+    },
+    {
+      "doc": null,
+      "end_line": 28,
+      "kind": "async_function",
+      "name": "build",
+      "signature": "(name: string)",
+      "start_line": 26
+    },
+    {
+      "doc": null,
+      "end_line": 30,
+      "kind": "exported_variable",
+      "name": "DEFAULT_NAME",
+      "signature": null,
+      "start_line": 30
+    }
+  ]
+}

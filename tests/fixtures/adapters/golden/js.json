@@ -1,0 +1,61 @@
+{
+  "language": "ts_js_lexical",
+  "symbols": [
+    {
+      "doc": null,
+      "end_line": 9,
+      "kind": "class",
+      "name": "Worker",
+      "signature": "()",
+      "start_line": 1
+    },
+    {
+      "doc": null,
+      "end_line": 4,
+      "kind": "method",
+      "name": "Worker.run",
+      "signature": "(value)",
+      "start_line": 2
+    },
+    {
+      "doc": null,
+      "end_line": 8,
+      "kind": "method",
+      "name": "Worker.from",
+      "signature": "(id)",
+      "start_line": 6
+    },
+    {
+      "doc": null,
+      "end_line": 16,
+      "kind": "function",
+      "name": "helper",
+      "signature": "(flag)",
+      "start_line": 11
+    },
+    {
+      "doc": null,
+      "end_line": 18,
+      "kind": "exported_variable",
+      "name": "helper",
+      "signature": null,
+      "start_line": 18
+    },
+    {
+      "doc": null,
+      "end_line": 19,
+      "kind": "exported_variable",
+      "name": "main",
+      "signature": null,
+      "start_line": 19
+    },
+    {
+      "doc": null,
+      "end_line": 20,
+      "kind": "exported_variable",
+      "name": "VERSION",
+      "signature": null,
+      "start_line": 20
+    }
+  ]
+}

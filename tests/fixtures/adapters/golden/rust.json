@@ -1,0 +1,101 @@
+{
+  "language": "rust_lexical",
+  "symbols": [
+    {
+      "doc": null,
+      "end_line": 3,
+      "kind": "mod",
+      "name": "engine",
+      "signature": null,
+      "start_line": 1
+    },
+    {
+      "doc": null,
+      "end_line": 7,
+      "kind": "struct",
+      "name": "Service",
+      "signature": null,
+      "start_line": 5
+    },
+    {
+      "doc": null,
+      "end_line": 12,
+      "kind": "enum",
+      "name": "Mode",
+      "signature": null,
+      "start_line": 9
+    },
+    {
+      "doc": null,
+      "end_line": 16,
+      "kind": "trait",
+      "name": "Runner",
+      "signature": null,
+      "start_line": 14
+    },
+    {
+      "doc": null,
+      "end_line": 18,
+      "kind": "const",
+      "name": "DEFAULT_NAME",
+      "signature": null,
+      "start_line": 18
+    },
+    {
+      "doc": null,
+      "end_line": 19,
+      "kind": "type",
+      "name": "ResultText",
+      "signature": null,
+      "start_line": 19
+    },
+    {
+      "doc": null,
+      "end_line": 23,
+      "kind": "function",
+      "name": "build",
+      "signature": "(name: String)",
+      "start_line": 21
+    },
+    {
+      "doc": null,
+      "end_line": 33,
+      "kind": "impl",
+      "name": "Service",
+      "signature": null,
+      "start_line": 25
+    },
+    {
+      "doc": null,
+      "end_line": 28,
+      "kind": "method",
+      "name": "Service.new",
+      "signature": "(name: String)",
+      "start_line": 26
+    },
+    {
+      "doc": null,
+      "end_line": 32,
+      "kind": "method",
+      "name": "Service.run",
+      "signature": "(&self, input: &str)",
+      "start_line": 30
+    },
+    {
+      "doc": null,
+      "end_line": 39,
+      "kind": "impl",
+      "name": "Service",
+      "signature": null,
+      "start_line": 35
+    },
+    {
+      "doc": null,
+      "end_line": 38,
+      "kind": "method",
+      "name": "Service.run",
+      "signature": "(&self, input: &str)",
+      "start_line": 36
+    }
+  ]
+}
