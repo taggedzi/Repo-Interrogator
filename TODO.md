@@ -1191,6 +1191,7 @@ Decide whether to adopt tree-sitter as a shared enhanced parser dependency.
 
 **Acceptance criteria**
 - Human decision captured explicitly with go/no-go.
+- Decision recorded in ADR: `docs/adr/ADR-0009-no-tree-sitter-for-now.md`.
 
 **Command gates**
 ```bash
