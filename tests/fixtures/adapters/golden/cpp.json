@@ -9,7 +9,7 @@
       "kind": "namespace",
       "name": "engine",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": null,
       "start_line": 1
     },
@@ -21,7 +21,7 @@
       "kind": "class",
       "name": "Service",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": "()",
       "start_line": 3
     },
@@ -32,8 +32,8 @@
       "is_conditional": null,
       "kind": "method",
       "name": "Service.Service",
-      "parent_symbol": null,
-      "scope_kind": null,
+      "parent_symbol": "Service",
+      "scope_kind": "class",
       "signature": "()",
       "start_line": 5
     },
@@ -44,8 +44,8 @@
       "is_conditional": null,
       "kind": "method",
       "name": "Service.run",
-      "parent_symbol": null,
-      "scope_kind": null,
+      "parent_symbol": "Service",
+      "scope_kind": "class",
       "signature": "(int value)",
       "start_line": 6
     },
@@ -56,8 +56,8 @@
       "is_conditional": null,
       "kind": "method",
       "name": "Service.make",
-      "parent_symbol": null,
-      "scope_kind": null,
+      "parent_symbol": "Service",
+      "scope_kind": "class",
       "signature": "()",
       "start_line": 7
     },
@@ -69,7 +69,7 @@
       "kind": "struct",
       "name": "Config",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": "()",
       "start_line": 10
     },
@@ -80,8 +80,8 @@
       "is_conditional": null,
       "kind": "method",
       "name": "Config.enabled",
-      "parent_symbol": null,
-      "scope_kind": null,
+      "parent_symbol": "Config",
+      "scope_kind": "class",
       "signature": "()",
       "start_line": 12
     },
@@ -93,7 +93,7 @@
       "kind": "enum",
       "name": "Mode",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": null,
       "start_line": 15
     },
@@ -105,7 +105,7 @@
       "kind": "function",
       "name": "parse_value",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": "(int input)",
       "start_line": 20
     }

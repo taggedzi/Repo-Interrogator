@@ -9,7 +9,7 @@
       "kind": "namespace",
       "name": "Acme.Tools",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": null,
       "start_line": 1
     },
@@ -21,7 +21,7 @@
       "kind": "interface",
       "name": "Acme.Tools.IRunner",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": "()",
       "start_line": 3
     },
@@ -32,8 +32,8 @@
       "is_conditional": null,
       "kind": "method",
       "name": "Acme.Tools.IRunner.Run",
-      "parent_symbol": null,
-      "scope_kind": null,
+      "parent_symbol": "Acme.Tools.IRunner",
+      "scope_kind": "class",
       "signature": "(string input)",
       "start_line": 5
     },
@@ -45,7 +45,7 @@
       "kind": "enum",
       "name": "Acme.Tools.Mode",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": "()",
       "start_line": 8
     },
@@ -57,7 +57,7 @@
       "kind": "record",
       "name": "Acme.Tools.Result",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": "()",
       "start_line": 14
     },
@@ -69,7 +69,7 @@
       "kind": "class",
       "name": "Acme.Tools.Service",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": "()",
       "start_line": 16
     },
@@ -81,7 +81,7 @@
       "kind": "property",
       "name": "Acme.Tools.Service.Name",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": null,
       "start_line": 18
     },
@@ -93,7 +93,7 @@
       "kind": "event",
       "name": "Acme.Tools.Service.Changed",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": null,
       "start_line": 20
     },
@@ -104,8 +104,8 @@
       "is_conditional": null,
       "kind": "constructor",
       "name": "Acme.Tools.Service.Service",
-      "parent_symbol": null,
-      "scope_kind": null,
+      "parent_symbol": "Acme.Tools.Service",
+      "scope_kind": "class",
       "signature": "(string name)",
       "start_line": 22
     },
@@ -116,8 +116,8 @@
       "is_conditional": null,
       "kind": "method",
       "name": "Acme.Tools.Service.RunAsync",
-      "parent_symbol": null,
-      "scope_kind": null,
+      "parent_symbol": "Acme.Tools.Service",
+      "scope_kind": "class",
       "signature": "(string input)",
       "start_line": 27
     },
@@ -128,8 +128,8 @@
       "is_conditional": null,
       "kind": "method",
       "name": "Acme.Tools.Service.Build",
-      "parent_symbol": null,
-      "scope_kind": null,
+      "parent_symbol": "Acme.Tools.Service",
+      "scope_kind": "class",
       "signature": "(string name)",
       "start_line": 32
     }

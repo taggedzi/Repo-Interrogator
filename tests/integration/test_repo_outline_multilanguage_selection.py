@@ -63,3 +63,8 @@ def test_repo_outline_selects_expected_adapter_by_extension(tmp_path: Path) -> N
         else:
             assert isinstance(result["symbols"], list)
             assert len(result["symbols"]) >= 1
+            for symbol in result["symbols"]:
+                if language != "python":
+                    assert symbol["scope_kind"] in {"module", "class"}
+                    if symbol["scope_kind"] == "class":
+                        assert symbol["parent_symbol"] is not None

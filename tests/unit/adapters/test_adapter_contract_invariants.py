@@ -153,3 +153,32 @@ def test_normalize_and_sort_symbols_normalizes_optional_metadata_fields() -> Non
     assert normalized[0].scope_kind == "module"
     assert normalized[0].is_conditional is True
     assert normalized[0].decl_context == "if>try"
+
+
+def test_normalize_and_sort_symbols_infers_default_metadata_for_lexical_symbols() -> None:
+    symbols = [
+        OutlineSymbol(
+            kind="method",
+            name="pkg.Service.run",
+            signature="()",
+            start_line=10,
+            end_line=12,
+            doc=None,
+        ),
+        OutlineSymbol(
+            kind="function",
+            name="pkg.build",
+            signature="()",
+            start_line=20,
+            end_line=25,
+            doc=None,
+        ),
+    ]
+
+    normalized = normalize_and_sort_symbols(symbols)
+
+    by_name = {item.name: item for item in normalized}
+    assert by_name["pkg.Service.run"].scope_kind == "class"
+    assert by_name["pkg.Service.run"].parent_symbol == "pkg.Service"
+    assert by_name["pkg.build"].scope_kind == "module"
+    assert by_name["pkg.build"].parent_symbol is None

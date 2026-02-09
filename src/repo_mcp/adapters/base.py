@@ -71,18 +71,41 @@ def validate_outline_symbols(symbols: list[OutlineSymbol]) -> None:
 
 def normalize_and_sort_symbols(symbols: list[OutlineSymbol]) -> list[OutlineSymbol]:
     """Normalize signatures, validate schema invariants, and sort deterministically."""
-    normalized = [
-        replace(
-            symbol,
-            signature=normalize_signature(symbol.signature),
-            parent_symbol=normalize_optional_text(symbol.parent_symbol),
-            scope_kind=normalize_optional_text(symbol.scope_kind),
-            decl_context=normalize_optional_text(symbol.decl_context),
-        )
-        for symbol in symbols
-    ]
+    normalized = [_normalize_symbol(symbol) for symbol in symbols]
     validate_outline_symbols(normalized)
     return sorted(normalized, key=symbol_sort_key)
+
+
+def _normalize_symbol(symbol: OutlineSymbol) -> OutlineSymbol:
+    normalized_scope_kind = normalize_optional_text(symbol.scope_kind)
+    inferred_scope_kind = normalized_scope_kind or _infer_scope_kind(symbol.kind)
+    normalized_parent = normalize_optional_text(symbol.parent_symbol)
+    inferred_parent = normalized_parent or _infer_parent_symbol(
+        name=symbol.name,
+        scope_kind=inferred_scope_kind,
+    )
+    return replace(
+        symbol,
+        signature=normalize_signature(symbol.signature),
+        parent_symbol=inferred_parent,
+        scope_kind=inferred_scope_kind,
+        decl_context=normalize_optional_text(symbol.decl_context),
+    )
+
+
+def _infer_scope_kind(kind: str) -> str:
+    if kind in {"method", "async_method", "constructor"}:
+        return "class"
+    return "module"
+
+
+def _infer_parent_symbol(name: str, scope_kind: str | None) -> str | None:
+    if scope_kind != "class":
+        return None
+    if "." not in name:
+        return None
+    parent, _ = name.rsplit(".", 1)
+    return parent or None
 
 
 class LanguageAdapter(Protocol):

@@ -9,7 +9,7 @@
       "kind": "type",
       "name": "worker.Runner",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": null,
       "start_line": 5
     },
@@ -21,7 +21,7 @@
       "kind": "type",
       "name": "worker.Service",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": null,
       "start_line": 9
     },
@@ -33,7 +33,7 @@
       "kind": "const",
       "name": "worker.DefaultName",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": null,
       "start_line": 14
     },
@@ -45,7 +45,7 @@
       "kind": "const",
       "name": "worker.MaxRetries",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": null,
       "start_line": 15
     },
@@ -57,7 +57,7 @@
       "kind": "var",
       "name": "worker.GlobalEnabled",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": null,
       "start_line": 19
     },
@@ -69,7 +69,7 @@
       "kind": "var",
       "name": "worker.globalVersion",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": null,
       "start_line": 20
     },
@@ -81,7 +81,7 @@
       "kind": "function",
       "name": "worker.Build",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": "(name string)",
       "start_line": 23
     },
@@ -92,8 +92,8 @@
       "is_conditional": null,
       "kind": "method",
       "name": "worker.Service.Run",
-      "parent_symbol": null,
-      "scope_kind": null,
+      "parent_symbol": "worker.Service",
+      "scope_kind": "class",
       "signature": "(ctx context.Context)",
       "start_line": 27
     }

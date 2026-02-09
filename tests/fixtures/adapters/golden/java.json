@@ -9,7 +9,7 @@
       "kind": "interface",
       "name": "com.example.service.Runner",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": "()",
       "start_line": 3
     },
@@ -20,8 +20,8 @@
       "is_conditional": null,
       "kind": "method",
       "name": "com.example.service.Runner.run",
-      "parent_symbol": null,
-      "scope_kind": null,
+      "parent_symbol": "com.example.service.Runner",
+      "scope_kind": "class",
       "signature": "(String input)",
       "start_line": 4
     },
@@ -33,7 +33,7 @@
       "kind": "enum",
       "name": "com.example.service.Mode",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": "()",
       "start_line": 7
     },
@@ -45,7 +45,7 @@
       "kind": "type",
       "name": "com.example.service.Result",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": "()",
       "start_line": 12
     },
@@ -57,7 +57,7 @@
       "kind": "class",
       "name": "com.example.service.Service",
       "parent_symbol": null,
-      "scope_kind": null,
+      "scope_kind": "module",
       "signature": "()",
       "start_line": 14
     },
@@ -68,8 +68,8 @@
       "is_conditional": null,
       "kind": "constructor",
       "name": "com.example.service.Service.Service",
-      "parent_symbol": null,
-      "scope_kind": null,
+      "parent_symbol": "com.example.service.Service",
+      "scope_kind": "class",
       "signature": "(String name)",
       "start_line": 17
     },
@@ -80,8 +80,8 @@
       "is_conditional": null,
       "kind": "method",
       "name": "com.example.service.Service.run",
-      "parent_symbol": null,
-      "scope_kind": null,
+      "parent_symbol": "com.example.service.Service",
+      "scope_kind": "class",
       "signature": "(String input)",
       "start_line": 21
     },
@@ -92,8 +92,8 @@
       "is_conditional": null,
       "kind": "method",
       "name": "com.example.service.Service.parse",
-      "parent_symbol": null,
-      "scope_kind": null,
+      "parent_symbol": "com.example.service.Service",
+      "scope_kind": "class",
       "signature": "(int value)",
       "start_line": 25
     }
