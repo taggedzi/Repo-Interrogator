@@ -9,6 +9,7 @@ from .base import (
     symbol_sort_key,
     validate_outline_symbols,
 )
+from .cpp import CppLexicalAdapter
 from .fallback import LexicalFallbackAdapter
 from .go import GoLexicalAdapter
 from .java import JavaLexicalAdapter
@@ -30,6 +31,7 @@ from .ts_js import TypeScriptJavaScriptLexicalAdapter
 __all__ = [
     "AdapterRegistry",
     "AdapterContractError",
+    "CppLexicalAdapter",
     "LanguageAdapter",
     "LexicalFallbackAdapter",
     "GoLexicalAdapter",
