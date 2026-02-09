@@ -10,6 +10,15 @@ from .base import (
     validate_outline_symbols,
 )
 from .fallback import LexicalFallbackAdapter
+from .lexical import (
+    BraceBlock,
+    BraceScanResult,
+    LexicalRules,
+    LexicalToken,
+    extract_identifier_tokens,
+    mask_comments_and_strings,
+    scan_brace_blocks,
+)
 from .python import PythonAstAdapter
 from .registry import AdapterRegistry
 from .runtime import build_adapter_registry
@@ -19,11 +28,18 @@ __all__ = [
     "AdapterContractError",
     "LanguageAdapter",
     "LexicalFallbackAdapter",
+    "LexicalRules",
+    "LexicalToken",
     "OutlineSymbol",
     "PythonAstAdapter",
+    "BraceBlock",
+    "BraceScanResult",
     "build_adapter_registry",
+    "extract_identifier_tokens",
+    "mask_comments_and_strings",
     "normalize_and_sort_symbols",
     "normalize_signature",
+    "scan_brace_blocks",
     "symbol_sort_key",
     "validate_outline_symbols",
 ]
