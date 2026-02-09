@@ -19,6 +19,10 @@ Current defaults:
 - `adapters.python_enabled = true`
 - `data_dir = <repo_root>/.repo_mcp`
 
+Note:
+- `repo.outline` can still parse supported files directly by path.
+- `repo.search` and `repo.build_context_bundle` only operate on indexed files, so add extra language extensions if needed.
+
 ## Hard Caps
 
 Overrides may lower limits freely, or raise only up to these caps:
@@ -51,6 +55,24 @@ exclude_globs = ["**/.git/**", "**/__pycache__/**", "**/.venv/**"]
 
 [adapters]
 python_enabled = true
+```
+
+Example with multilingual indexing enabled:
+
+```toml
+[index]
+include_extensions = [
+  ".py",
+  ".ts", ".tsx", ".mts", ".cts",
+  ".js", ".jsx", ".mjs", ".cjs",
+  ".java",
+  ".go",
+  ".rs",
+  ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx", ".h",
+  ".cs",
+  ".md", ".rst", ".toml", ".yaml", ".yml", ".json", ".ini", ".cfg"
+]
+exclude_globs = ["**/.git/**", "**/__pycache__/**", "**/.venv/**"]
 ```
 
 ## CLI Overrides

@@ -7,7 +7,7 @@ It is for repository interrogation, not code modification.
 What it does:
 - indexes files inside one `repo_root`
 - runs deterministic BM25 search
-- outlines Python files with AST
+- outlines code structure via pluggable language adapters
 - builds context bundles with citations
 - writes sanitized audit logs
 
@@ -90,6 +90,25 @@ python -m pytest -q
 - `repo.build_context_bundle`
 - `repo.refresh_index`
 - `repo.audit_log`
+
+## Language Adapter Support
+
+`repo.outline` currently supports these adapters:
+
+- Python: `python` (AST-based)
+- TypeScript/JavaScript: `ts_js_lexical` (lexical)
+- Java: `java_lexical` (lexical)
+- Go: `go_lexical` (lexical)
+- Rust: `rust_lexical` (lexical)
+- C++: `cpp_lexical` (lexical)
+- C#: `csharp_lexical` (lexical)
+- Fallback: `lexical` (empty structural outline for unsupported files)
+
+Important limits:
+- Non-Python adapters are lexical. They are deterministic and fast, but conservative.
+- Macro/generated code and advanced language features can be partially represented.
+- Search and context bundle coverage depends on indexed extensions. By default, index includes mostly Python/docs config formats.
+- To include TS/JS/Java/Go/Rust/C++/C# in search and bundling, extend `index.include_extensions` in `repo_mcp.toml`.
 
 ## Documentation
 

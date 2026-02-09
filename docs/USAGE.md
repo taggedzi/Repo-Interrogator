@@ -172,8 +172,35 @@ Request:
 
 Result fields:
 - `path`
-- `language` (`python` or `lexical`)
+- `language` (adapter name)
 - `symbols` (kind, name, signature, start_line, end_line, doc)
+
+Current language values:
+- `python`
+- `ts_js_lexical`
+- `java_lexical`
+- `go_lexical`
+- `rust_lexical`
+- `cpp_lexical`
+- `csharp_lexical`
+- `lexical` (fallback)
+
+TypeScript example:
+
+```json
+{"id":"req-out-ts","method":"repo.outline","params":{"path":"src/mod.ts"}}
+```
+
+C# example:
+
+```json
+{"id":"req-out-cs","method":"repo.outline","params":{"path":"src/Program.cs"}}
+```
+
+Notes:
+- Python uses AST parsing.
+- Non-Python adapters are lexical and conservative by design.
+- `repo.outline` can work even when file extensions are not indexed for search.
 
 ## `repo.refresh_index`
 Build or refresh the index on disk.
@@ -267,6 +294,10 @@ Artifacts written to `data_dir`:
 - `last_bundle.json`
 - `last_bundle.md`
 
+Important:
+- Bundling uses search hits, so files must be indexed to appear in bundles.
+- If you need TS/JS/Java/Go/Rust/C++/C# in bundles, add their extensions to `index.include_extensions` in `repo_mcp.toml`.
+
 ## `repo.audit_log`
 Read sanitized audit events.
 
@@ -315,6 +346,14 @@ Event fields include:
 {"id":"w4","method":"repo.outline","params":{"path":"src/repo_mcp/server.py"}}
 ```
 
+Optional multilingual outline checks:
+
+```json
+{"id":"w4a","method":"repo.outline","params":{"path":"src/mod.ts"}}
+{"id":"w4b","method":"repo.outline","params":{"path":"src/mod.go"}}
+{"id":"w4c","method":"repo.outline","params":{"path":"src/mod.rs"}}
+```
+
 5. Build a context bundle for your coding task.
 
 ```json
@@ -329,3 +368,26 @@ Event fields include:
   }
 }
 ```
+
+## Language Adapter Limitations
+
+The current non-Python adapters are lexical. This keeps behavior deterministic and dependency-light, but some syntax is intentionally conservative.
+
+- TypeScript/JavaScript:
+  - Best for classes, functions, exports, and common method forms.
+  - Dynamic exports and complex metaprogramming may be partial.
+- Java:
+  - Best for top-level types plus constructors/methods.
+  - Nested/anonymous classes and complex generic syntax can be partial.
+- Go:
+  - Best for package types, funcs, methods, const/var groups.
+  - Build tags and uncommon declaration layouts can be partial.
+- Rust:
+  - Best for `mod/struct/enum/trait/impl/fn/const/type`.
+  - Macro-generated items and advanced trait bounds can be partial.
+- C++:
+  - Best for namespaces, class/struct/enum, common methods/functions.
+  - Heavy template/macro/function-pointer forms can be partial.
+- C#:
+  - Best for namespace/type/method/property/event and constructors.
+  - Partial classes and advanced expression-bodied patterns can be partial.
