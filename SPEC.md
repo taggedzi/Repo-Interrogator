@@ -233,11 +233,55 @@ Each adapter may provide:
   * line ranges
   * first docstring line (optional)
 
+Python v2 outline behavior (when enabled by spec/version):
+
+* include declarations in nested scopes
+* include declarations inside conditional blocks (`if`, `try`, `match`, etc.)
+* do not evaluate runtime branch truth
+* represent declarations as syntactic facts only
+
 Other languages:
 
 * lexical search + open_file only
 
 Adapters must be pluggable without core changes.
+
+### 10.3 Outline contract (v2, cross-adapter)
+
+`outline(path, text)` is declaration-based and deterministic.
+
+Required behavior:
+
+* include syntactically declared symbols, including nested and conditional declarations
+* never execute code and never evaluate runtime branch truth
+* preserve deterministic ordering with explicit stable sort rules
+* keep adapters pluggable; language-specific extraction remains in adapter layer
+
+Required symbol fields (existing):
+
+* `kind`
+* `name`
+* `signature`
+* `start_line`
+* `end_line`
+* `doc` (optional)
+
+New optional symbol fields (v2):
+
+* `parent_symbol` (nullable): fully-qualified parent declaration name
+* `scope_kind` (nullable): one of `module`, `class`, `function`
+* `is_conditional` (nullable bool): true when declaration appears under control-flow
+* `decl_context` (nullable string): compact deterministic declaration context label
+
+Signature guidance:
+
+* best effort only
+* for Python classes, include bases and class keywords when representable from AST
+
+Error handling:
+
+* parse failures must not leak partial content
+* adapters return an empty symbol list for unreadable/unparseable files
 
 ---
 
@@ -316,6 +360,15 @@ Returns:
   * start_line
   * end_line
   * doc (optional)
+  * parent_symbol (optional, v2)
+  * scope_kind (optional, v2)
+  * is_conditional (optional, v2)
+  * decl_context (optional, v2)
+
+Notes:
+
+* symbol list is deterministic and declaration-based
+* symbols represent syntactic declarations; runtime branch truth is not inferred
 
 ---
 
@@ -450,6 +503,10 @@ Returns:
 * incremental index correctness
 * search stability
 * Python outline accuracy
+* nested declaration extraction (module/class/function scopes)
+* conditional declaration extraction (without runtime evaluation)
+* outline ordering stability across repeated runs
+* symbol parent/scope metadata correctness (v2 fields)
 
 ### Integration tests
 
@@ -471,3 +528,4 @@ Returns:
 **M2** – Python adapter + outline
 **M3** – Deterministic context bundler
 **M4** – Plugin + future-ready hooks
+**M5** – v2 declaration-based outline semantics (nested/conditional + metadata)
