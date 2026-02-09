@@ -22,6 +22,7 @@ from .lexical import (
 from .python import PythonAstAdapter
 from .registry import AdapterRegistry
 from .runtime import build_adapter_registry
+from .ts_js import TypeScriptJavaScriptLexicalAdapter
 
 __all__ = [
     "AdapterRegistry",
@@ -32,6 +33,7 @@ __all__ = [
     "LexicalToken",
     "OutlineSymbol",
     "PythonAstAdapter",
+    "TypeScriptJavaScriptLexicalAdapter",
     "BraceBlock",
     "BraceScanResult",
     "build_adapter_registry",
