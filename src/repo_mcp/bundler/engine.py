@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Protocol
 
 from repo_mcp.bundler.models import (
@@ -37,6 +37,13 @@ class ReadLinesFn(Protocol):
         """Return text lines for an inclusive range."""
 
 
+class OutlineFn(Protocol):
+    """Outline callback signature used by bundler."""
+
+    def __call__(self, path: str) -> list[dict[str, object]]:
+        """Return adapter-agnostic outline symbol dictionaries for one path."""
+
+
 def build_context_bundle(
     prompt: str,
     budget: BundleBudget,
@@ -46,6 +53,7 @@ def build_context_bundle(
     include_tests: bool = True,
     strategy: str = "hybrid",
     top_k_per_query: int = 20,
+    outline_fn: OutlineFn | None = None,
 ) -> BundleResult:
     """Build deterministic context bundle using multi-query search and budgets."""
     if budget.max_files < 1:
@@ -56,6 +64,7 @@ def build_context_bundle(
     prompt_fingerprint = _sha256_hex(prompt)
     queries = _build_queries(prompt)
     raw_hits: list[_Hit] = []
+    symbol_cache: dict[str, tuple[_SymbolRange, ...]] = {}
     for query in queries:
         for hit in search_fn(query=query, top_k=top_k_per_query):
             candidate = _candidate_from_hit(hit, source_query=query)
@@ -63,6 +72,11 @@ def build_context_bundle(
                 continue
             if not include_tests and _looks_like_test_path(candidate.path):
                 continue
+            candidate = _align_hit_to_symbol_ranges(
+                hit=candidate,
+                outline_fn=outline_fn,
+                symbol_cache=symbol_cache,
+            )
             raw_hits.append(candidate)
 
     deduped = _dedupe_hits(raw_hits)
@@ -154,6 +168,15 @@ class _Hit:
     score: float
     source_query: str
     matched_terms: tuple[str, ...]
+    aligned_symbol: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _SymbolRange:
+    name: str
+    kind: str
+    start_line: int
+    end_line: int
 
 
 def _dedupe_hits(hits: list[_Hit]) -> list[_Hit]:
@@ -171,6 +194,77 @@ def _dedupe_hits(hits: list[_Hit]) -> list[_Hit]:
             best_by_key[key] = hit
     keys = sorted(best_by_key.keys(), key=lambda item: (item[0], item[1], item[2]))
     return [best_by_key[key] for key in keys]
+
+
+def _align_hit_to_symbol_ranges(
+    hit: _Hit,
+    outline_fn: OutlineFn | None,
+    symbol_cache: dict[str, tuple[_SymbolRange, ...]],
+) -> _Hit:
+    if outline_fn is None:
+        return hit
+    ranges = symbol_cache.get(hit.path)
+    if ranges is None:
+        ranges = _load_symbol_ranges(hit.path, outline_fn)
+        symbol_cache[hit.path] = ranges
+    if not ranges:
+        return hit
+    candidates = [
+        item
+        for item in ranges
+        if not (item.end_line < hit.start_line or item.start_line > hit.end_line)
+    ]
+    if not candidates:
+        return hit
+    chosen = min(
+        candidates,
+        key=lambda item: (
+            item.end_line - item.start_line,
+            item.start_line,
+            item.end_line,
+            item.name,
+            item.kind,
+        ),
+    )
+    return replace(
+        hit,
+        start_line=chosen.start_line,
+        end_line=chosen.end_line,
+        aligned_symbol=chosen.name,
+    )
+
+
+def _load_symbol_ranges(path: str, outline_fn: OutlineFn) -> tuple[_SymbolRange, ...]:
+    try:
+        payload = outline_fn(path)
+    except Exception:
+        return ()
+    ranges: list[_SymbolRange] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        kind = item.get("kind")
+        start_line = item.get("start_line")
+        end_line = item.get("end_line")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        if not isinstance(kind, str) or not kind.strip():
+            continue
+        if not isinstance(start_line, int) or not isinstance(end_line, int):
+            continue
+        if start_line < 1 or end_line < start_line:
+            continue
+        ranges.append(
+            _SymbolRange(
+                name=name,
+                kind=kind,
+                start_line=start_line,
+                end_line=end_line,
+            )
+        )
+    ranges.sort(key=lambda item: (item.start_line, item.end_line, item.name, item.kind))
+    return tuple(ranges)
 
 
 def _select_with_budget(
@@ -227,10 +321,13 @@ def _select_with_budget(
 
 def _build_rationale(hit: _Hit) -> str:
     terms = ", ".join(hit.matched_terms) if hit.matched_terms else "none"
-    return (
+    rationale = (
         f"Selected from query '{hit.source_query}' with score {hit.score:.6f}; "
         f"matched_terms={terms}."
     )
+    if hit.aligned_symbol is not None:
+        return f"{rationale} aligned_symbol={hit.aligned_symbol}."
+    return rationale
 
 
 def _bundle_id(

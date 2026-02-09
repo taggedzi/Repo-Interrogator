@@ -491,6 +491,7 @@ class StdioServer:
             budget=BundleBudget(max_files=max_files, max_total_lines=max_total_lines),
             search_fn=self._index_manager.search,
             read_lines_fn=self._read_repo_lines,
+            outline_fn=self._bundle_outline_symbols,
             include_tests=include_tests,
             strategy="hybrid",
             top_k_per_query=self._limits.max_search_hits,
@@ -523,6 +524,21 @@ class StdioServer:
         except OSError as error:
             warnings.append(f"Failed to write last_bundle.md: {error}")
         return warnings
+
+    def _bundle_outline_symbols(self, path: str) -> list[dict[str, object]]:
+        """Return outline symbols for bundling, falling back safely on errors."""
+        try:
+            outlined = self._outline_path(path)
+        except Exception:
+            return []
+        symbols = outlined.get("symbols", [])
+        if not isinstance(symbols, list):
+            return []
+        safe_symbols: list[dict[str, object]] = []
+        for item in symbols:
+            if isinstance(item, dict):
+                safe_symbols.append(item)
+        return safe_symbols
 
 
 def create_server(
