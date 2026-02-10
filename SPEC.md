@@ -123,6 +123,7 @@ Blocked reads must return:
 * max total bytes per response
 * max search hits
 * max files per context bundle
+* max references per response
 
 ### 7.4 Redaction policy
 
@@ -144,6 +145,7 @@ Blocked reads must return:
   * `max_open_lines`
   * `max_total_bytes_per_response`
   * `max_search_hits`
+  * `max_references`
 * indexing:
 
   * included extensions
@@ -282,6 +284,45 @@ Error handling:
 
 * parse failures must not leak partial content
 * adapters return an empty symbol list for unreadable/unparseable files
+
+### 10.4 Cross-file references contract (v2.5, cross-adapter)
+
+`references(path, symbol)` behavior is deterministic and declaration-linked.
+
+Required behavior:
+
+* do not execute code and do not evaluate runtime branch truth
+* return best-effort symbol usage references linked to known declarations
+* preserve deterministic ordering with explicit stable sort rules
+* keep extraction strategy explicit: `ast` (Python) or lexical fallback (other languages)
+
+Reference record fields:
+
+* `symbol`: normalized symbol name being referenced
+* `path`: repo-relative path
+* `line`: 1-based line number
+* `kind`: reference kind (for example `import`, `call`, `read`, `write`, `inheritance`, `instantiation`)
+* `evidence`: compact deterministic source snippet or token evidence
+* `strategy`: extraction strategy (`ast` or `lexical`)
+* `confidence`: `high`, `medium`, or `low`
+
+Ordering rules:
+
+* primary: `path` ascending
+* secondary: `line` ascending
+* tertiary: `symbol` ascending
+* quaternary: `kind` ascending
+
+Limits:
+
+* references must obey response byte limits
+* references must enforce explicit max-result limits
+* truncation must be explicit and auditable in the response payload
+
+Error handling:
+
+* unsupported paths/adapters return explicit actionable errors
+* parse/read failures never leak partial blocked content
 
 ---
 
@@ -461,6 +502,36 @@ Returns:
 
 ---
 
+### 11.9 `repo.references` (v2.5)
+
+Inputs:
+
+* `symbol`
+* `path?` (optional path scope)
+* `top_k?` (bounded max references)
+
+Returns:
+
+* `symbol`
+* `references` list:
+
+  * `path`
+  * `line`
+  * `kind`
+  * `evidence`
+  * `strategy`
+  * `confidence`
+* `truncated` (bool)
+* `total_candidates` (int)
+
+Notes:
+
+* output is deterministic and declaration-linked
+* no runtime branch evaluation is performed
+* Python uses AST-first extraction; other languages use lexical fallback in v2.5
+
+---
+
 ## 12. Observability
 
 * Structured JSONL audit log
@@ -507,6 +578,10 @@ Returns:
 * conditional declaration extraction (without runtime evaluation)
 * outline ordering stability across repeated runs
 * symbol parent/scope metadata correctness (v2 fields)
+* reference payload schema and deterministic ordering
+* reference extraction stability across repeated runs
+* bundle ranking stability with reference-aware signals
+* `why_selected` explanation stability and bounded shape
 
 ### Integration tests
 
@@ -529,3 +604,4 @@ Returns:
 **M3** – Deterministic context bundler
 **M4** – Plugin + future-ready hooks
 **M5** – v2 declaration-based outline semantics (nested/conditional + metadata)
+**M6** – v2.5 cross-file references + deterministic ranking/explainability

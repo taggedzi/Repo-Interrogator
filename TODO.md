@@ -23,8 +23,8 @@ For historical detail, see:
 
 ## Now
 
-- [ ] `V2.5-REF-001` Define deterministic cross-file reference contract in `SPEC.md` (fields, ordering, limits).
-- [ ] `V2.5-REF-002` Add ADR for cross-file references scope and non-goals.
+- [x] `V2.5-REF-001` Define deterministic cross-file reference contract in `SPEC.md` (fields, ordering, limits).
+- [x] `V2.5-REF-002` Add ADR for cross-file references scope and non-goals.
 - [ ] `V2.5-REF-003` Implement Python reference extraction (definition -> usage links, deterministic ordering).
 - [ ] `V2.5-RANK-001` Define deterministic bundle ranking signals and tie-break rules in `SPEC.md`.
 - [ ] `V2.5-RANK-002` Emit `why_selected` explanations for bundle selections.
@@ -56,6 +56,8 @@ For historical detail, see:
 - [x] `V2-OUTLINE-002` Added optional symbol metadata fields: `parent_symbol`, `scope_kind`, `is_conditional`, `decl_context`.
 - [x] `V2-OUTLINE-003` Wired v2 metadata through `repo.outline` responses.
 - [x] `V2-OUTLINE-004` Aligned non-Python adapters to optional metadata via deterministic inference.
+- [x] `V2.5-REF-001` Added cross-file references contract to `SPEC.md` (including deterministic ordering and limits).
+- [x] `V2.5-REF-002` Added ADR-0013 for v2.5 deterministic cross-file references scope/non-goals.
 - [x] `DOC-001` Added/updated contributor and security/community templates (`CONTRIBUTING.md`, `SECURITY.md`, issue/PR templates).
 - [x] `DOC-002` Updated `docs/USAGE.md` and `docs/AI_INTEGRATION.md` for v2 outline fields/semantics.
 
