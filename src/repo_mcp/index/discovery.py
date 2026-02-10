@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import os
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -30,6 +31,26 @@ class DiscoveryProfile:
     total_seconds: float
 
 
+@dataclass(slots=True, frozen=True)
+class _CandidateFile:
+    """Prepared candidate record discovered during traversal."""
+
+    relative_path: str
+    full_path: Path
+    size: int
+    mtime_ns: int
+
+
+@dataclass(slots=True, frozen=True)
+class _DiscoveryScanResult:
+    """Candidate files and deterministic scan counters."""
+
+    candidates: tuple[_CandidateFile, ...]
+    total_candidates: int
+    excluded_by_glob: int
+    excluded_by_extension: int
+
+
 def discover_files(
     repo_root: Path,
     config: IndexConfig,
@@ -39,7 +60,6 @@ def discover_files(
     """Discover indexable text files with deterministic ordering."""
     started = time.perf_counter()
     root = repo_root.resolve()
-    candidates: list[tuple[str, Path]] = []
     total_candidates = 0
     excluded_by_glob = 0
     excluded_by_extension = 0
@@ -50,37 +70,35 @@ def discover_files(
     binary_excluded = 0
     hashed_files = 0
 
-    for candidate in root.rglob("*"):
-        if not candidate.is_file():
-            continue
-        total_candidates += 1
-        relative = candidate.relative_to(root).as_posix()
-        if should_exclude(relative, config.exclude_globs):
-            excluded_by_glob += 1
-            continue
-        if not has_allowed_extension(relative, config.include_extensions):
-            excluded_by_extension += 1
-            continue
-        candidates.append((relative, candidate))
-
-    candidates.sort(key=lambda item: item[0])
+    include_extensions = set(config.include_extensions)
+    excluded_dir_names = _excluded_dir_names(config.exclude_globs)
+    scan = _discover_candidates(
+        root=root,
+        include_extensions=include_extensions,
+        exclude_globs=config.exclude_globs,
+        excluded_dir_names=excluded_dir_names,
+    )
+    candidates = list(scan.candidates)
+    total_candidates = scan.total_candidates
+    excluded_by_glob = scan.excluded_by_glob
+    excluded_by_extension = scan.excluded_by_extension
+    candidates.sort(key=lambda item: item.relative_path)
     records: list[FileRecord] = []
     prior = previous_records or {}
-    for rel, full_path in candidates:
+    for candidate in candidates:
+        rel = candidate.relative_path
+        full_path = candidate.full_path
         stat_started = time.perf_counter()
-        stat = full_path.stat()
+        size = candidate.size
+        mtime_ns = candidate.mtime_ns
         stat_seconds += time.perf_counter() - stat_started
         previous = prior.get(rel)
-        if (
-            previous is not None
-            and previous.size == stat.st_size
-            and previous.mtime_ns == stat.st_mtime_ns
-        ):
+        if previous is not None and previous.size == size and previous.mtime_ns == mtime_ns:
             records.append(
                 FileRecord(
                     path=rel,
-                    size=stat.st_size,
-                    mtime_ns=stat.st_mtime_ns,
+                    size=size,
+                    mtime_ns=mtime_ns,
                     content_hash=previous.content_hash,
                 )
             )
@@ -99,8 +117,8 @@ def discover_files(
         records.append(
             FileRecord(
                 path=rel,
-                size=stat.st_size,
-                mtime_ns=stat.st_mtime_ns,
+                size=size,
+                mtime_ns=mtime_ns,
                 content_hash=content_hash,
             )
         )
@@ -168,6 +186,79 @@ def has_allowed_extension(relative_path: str, include_extensions: tuple[str, ...
     """Return True when file extension is included."""
     suffix = Path(relative_path).suffix.lower()
     return suffix in include_extensions
+
+
+def _excluded_dir_names(exclude_globs: tuple[str, ...]) -> set[str]:
+    """Extract deterministic directory-name prunes from **/name/** glob patterns."""
+    output: set[str] = set()
+    for pattern in exclude_globs:
+        if not pattern.startswith("**/") or not pattern.endswith("/**"):
+            continue
+        name = pattern[3:-3].strip("/")
+        if not name:
+            continue
+        if any(char in name for char in "*?[]{}"):
+            continue
+        output.add(name)
+    return output
+
+
+def _discover_candidates(
+    *,
+    root: Path,
+    include_extensions: set[str],
+    exclude_globs: tuple[str, ...],
+    excluded_dir_names: set[str],
+) -> _DiscoveryScanResult:
+    """Walk tree deterministically with light pruning for excluded directories."""
+    candidates: list[_CandidateFile] = []
+    total_candidates = 0
+    excluded_by_glob = 0
+    excluded_by_extension = 0
+    stack: list[Path] = [root]
+    while stack:
+        current = stack.pop()
+        try:
+            with os.scandir(current) as entries:
+                ordered_entries = sorted(entries, key=lambda item: item.name)
+        except OSError:
+            continue
+        for entry in reversed(ordered_entries):
+            full_path = Path(entry.path)
+            relative = full_path.relative_to(root).as_posix()
+            if entry.is_dir(follow_symlinks=False):
+                if entry.name in excluded_dir_names and should_exclude(relative, exclude_globs):
+                    continue
+                stack.append(full_path)
+                continue
+            if not entry.is_file(follow_symlinks=False):
+                continue
+            total_candidates += 1
+            if should_exclude(relative, exclude_globs):
+                excluded_by_glob += 1
+                continue
+            suffix = Path(relative).suffix.lower()
+            if suffix not in include_extensions:
+                excluded_by_extension += 1
+                continue
+            try:
+                stat = entry.stat(follow_symlinks=False)
+            except OSError:
+                continue
+            candidates.append(
+                _CandidateFile(
+                    relative_path=relative,
+                    full_path=full_path,
+                    size=stat.st_size,
+                    mtime_ns=stat.st_mtime_ns,
+                )
+            )
+    return _DiscoveryScanResult(
+        candidates=tuple(candidates),
+        total_candidates=total_candidates,
+        excluded_by_glob=excluded_by_glob,
+        excluded_by_extension=excluded_by_extension,
+    )
 
 
 def build_file_record(repo_root: Path, full_path: Path) -> FileRecord:

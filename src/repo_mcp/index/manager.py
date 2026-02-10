@@ -50,6 +50,10 @@ class IndexManager:
         self._data_dir_prefix = self._compute_data_dir_prefix()
         self._search_docs_cache_marker: str | None = None
         self._search_docs_cache: list[SearchDocument] | None = None
+        self._filtered_search_docs_cache_marker: str | None = None
+        self._filtered_search_docs_cache: dict[
+            tuple[str | None, str | None], list[SearchDocument]
+        ] = {}
 
     def status(self) -> IndexStatus:
         """Return status derived from manifest, if present."""
@@ -154,8 +158,10 @@ class IndexManager:
         """Run deterministic BM25 search over indexed chunks."""
         if top_k < 1:
             return []
-        docs = self._load_search_documents()
-        filtered = self._filter_search_documents(docs, file_glob=file_glob, path_prefix=path_prefix)
+        filtered = self._load_filtered_search_documents(
+            file_glob=file_glob,
+            path_prefix=path_prefix,
+        )
         if not filtered:
             return []
         return bm25_search(documents=filtered, query=query, top_k=top_k)
@@ -190,7 +196,34 @@ class IndexManager:
 
         self._search_docs_cache = docs
         self._search_docs_cache_marker = marker
+        self._filtered_search_docs_cache_marker = marker
+        self._filtered_search_docs_cache = {}
         return docs
+
+    def _load_filtered_search_documents(
+        self,
+        *,
+        file_glob: str | None,
+        path_prefix: str | None,
+    ) -> list[SearchDocument]:
+        docs = self._load_search_documents()
+        marker = self._search_cache_marker()
+        if self._filtered_search_docs_cache_marker != marker:
+            self._filtered_search_docs_cache_marker = marker
+            self._filtered_search_docs_cache = {}
+
+        normalized_prefix = _normalize_path_prefix(path_prefix)
+        cache_key = (file_glob, normalized_prefix)
+        cached = self._filtered_search_docs_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        filtered = self._filter_search_documents(
+            docs,
+            file_glob=file_glob,
+            path_prefix=normalized_prefix,
+        )
+        self._filtered_search_docs_cache[cache_key] = filtered
+        return filtered
 
     def _search_cache_marker(self) -> str:
         manifest = self._read_manifest()
