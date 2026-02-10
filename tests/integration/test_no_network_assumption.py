@@ -45,6 +45,13 @@ def test_no_network_calls_during_tool_workflow(tmp_path: Path, monkeypatch) -> N
     assert server.handle_payload(
         {
             "id": "req-net-5",
+            "method": "repo.references",
+            "params": {"symbol": "parse"},
+        }
+    )["ok"]
+    assert server.handle_payload(
+        {
+            "id": "req-net-6",
             "method": "repo.build_context_bundle",
             "params": {
                 "prompt": "parse x",
@@ -54,6 +61,6 @@ def test_no_network_calls_during_tool_workflow(tmp_path: Path, monkeypatch) -> N
             },
         }
     )["ok"]
-    assert server.handle_payload({"id": "req-net-6", "method": "repo.audit_log", "params": {}})[
+    assert server.handle_payload({"id": "req-net-7", "method": "repo.audit_log", "params": {}})[
         "ok"
     ]

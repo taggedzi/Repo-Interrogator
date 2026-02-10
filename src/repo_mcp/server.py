@@ -11,7 +11,11 @@ from pathlib import Path
 from typing import TextIO
 
 from repo_mcp.adapters import AdapterRegistry, build_adapter_registry
-from repo_mcp.adapters.base import normalize_and_sort_symbols
+from repo_mcp.adapters.base import (
+    SymbolReference,
+    normalize_and_sort_references,
+    normalize_and_sort_symbols,
+)
 from repo_mcp.bundler import BundleBudget, BundleResult, build_context_bundle
 from repo_mcp.config import CliOverrides, ServerConfig, load_effective_config
 from repo_mcp.index import IndexManager, IndexSchemaUnsupportedError
@@ -44,6 +48,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-open-lines", type=int, required=False, default=None)
     parser.add_argument("--max-total-bytes-per-response", type=int, required=False, default=None)
     parser.add_argument("--max-search-hits", type=int, required=False, default=None)
+    parser.add_argument("--max-references", type=int, required=False, default=None)
     parser.add_argument(
         "--python-adapter-enabled", choices=("true", "false"), required=False, default=None
     )
@@ -80,6 +85,7 @@ class StdioServer:
             search_index=self._index_manager.search,
             outline_path=self._outline_path,
             build_context_bundle=self._build_context_bundle,
+            resolve_references=self._resolve_references,
             config=self._config,
         )
         self._fallback_request_counter = 0
@@ -506,6 +512,104 @@ class StdioServer:
             response["__warnings__"] = warnings
         return response
 
+    def _resolve_references(self, arguments: dict[str, object]) -> dict[str, object]:
+        symbol_value = arguments.get("symbol")
+        if not isinstance(symbol_value, str):
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.references symbol must be a string.",
+            )
+        symbol = symbol_value.strip()
+        if not symbol:
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.references symbol must be a non-empty string.",
+            )
+
+        path_value = arguments.get("path")
+        path_scope = path_value.strip() if isinstance(path_value, str) else None
+
+        top_k_value = arguments.get("top_k", self._limits.max_references)
+        if isinstance(top_k_value, int) and top_k_value > self._limits.max_references:
+            raise PolicyBlockedError(
+                reason="Requested top_k exceeds max_references limit.",
+                hint="Reduce top_k or adjust the configured references limit.",
+            )
+        if not isinstance(top_k_value, int):
+            top_k_value = self._limits.max_references
+        if top_k_value < 1:
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.references top_k must be >= 1.",
+            )
+
+        files = self._reference_source_files(path_scope)
+        candidates = self._collect_symbol_references(symbol=symbol, files=files)
+        total_candidates = len(candidates)
+        limited = candidates[:top_k_value]
+        return {
+            "symbol": symbol,
+            "references": [asdict(item) for item in limited],
+            "truncated": len(limited) < total_candidates,
+            "total_candidates": total_candidates,
+        }
+
+    def _reference_source_files(self, path_scope: str | None) -> list[tuple[str, str]]:
+        if path_scope is not None:
+            resolved = resolve_repo_path(repo_root=self._repo_root, candidate=path_scope)
+            enforce_file_access_policy(
+                repo_root=self._repo_root,
+                resolved_path=resolved,
+                limits=self._limits,
+            )
+            if not resolved.exists() or not resolved.is_file():
+                raise ToolDispatchError(
+                    code="INVALID_PARAMS",
+                    message=f"repo.references path is not a readable file: {path_scope}",
+                )
+            relative = resolved.relative_to(self._repo_root).as_posix()
+            text = resolved.read_text(encoding="utf-8", errors="replace")
+            return [(relative, text)]
+
+        files: list[tuple[str, str]] = []
+        for candidate in sorted(self._repo_root.rglob("*")):
+            if not candidate.is_file():
+                continue
+            if candidate.is_relative_to(self._data_dir):
+                continue
+            try:
+                enforce_file_access_policy(
+                    repo_root=self._repo_root,
+                    resolved_path=candidate,
+                    limits=self._limits,
+                )
+            except PolicyBlockedError:
+                continue
+            relative = candidate.relative_to(self._repo_root).as_posix()
+            text = candidate.read_text(encoding="utf-8", errors="replace")
+            files.append((relative, text))
+        return files
+
+    def _collect_symbol_references(
+        self, symbol: str, files: list[tuple[str, str]]
+    ) -> list[SymbolReference]:
+        by_path: dict[str, list[tuple[str, str]]] = {}
+        for path, text in files:
+            by_path.setdefault(path, []).append((path, text))
+
+        references: list[SymbolReference] = []
+        for path in sorted(by_path.keys()):
+            adapter = self._adapters.select(path)
+            resolver = getattr(adapter, "references_for_symbol", None)
+            if not callable(resolver):
+                continue
+            try:
+                resolved = resolver(symbol, by_path[path], top_k=None)
+            except Exception:
+                continue
+            references.extend(resolved)
+        return normalize_and_sort_references(references)
+
     def _write_last_bundle_artifacts(self, payload: dict[str, object]) -> list[str]:
         warnings: list[str] = []
         try:
@@ -556,11 +660,13 @@ def create_server(
     legacy_max_open_lines: int | None = None
     legacy_max_total_bytes: int | None = None
     legacy_max_search_hits: int | None = None
+    legacy_max_references: int | None = None
     if limits is not None:
         legacy_max_file_bytes = getattr(limits, "max_file_bytes", None)
         legacy_max_open_lines = getattr(limits, "max_open_lines", None)
         legacy_max_total_bytes = getattr(limits, "max_total_bytes_per_response", None)
         legacy_max_search_hits = getattr(limits, "max_search_hits", None)
+        legacy_max_references = getattr(limits, "max_references", None)
 
     overrides = CliOverrides(
         data_dir=Path(data_dir).resolve() if data_dir is not None else None,
@@ -568,6 +674,7 @@ def create_server(
         max_open_lines=legacy_max_open_lines,
         max_total_bytes_per_response=legacy_max_total_bytes,
         max_search_hits=legacy_max_search_hits,
+        max_references=legacy_max_references,
     )
     if cli_overrides is not None:
         overrides = CliOverrides(
@@ -592,6 +699,11 @@ def create_server(
                 if cli_overrides.max_search_hits is not None
                 else overrides.max_search_hits
             ),
+            max_references=(
+                cli_overrides.max_references
+                if cli_overrides.max_references is not None
+                else overrides.max_references
+            ),
             python_enabled=cli_overrides.python_enabled,
         )
 
@@ -614,6 +726,7 @@ def main(argv: list[str] | None = None) -> int:
         max_open_lines=args.max_open_lines,
         max_total_bytes_per_response=args.max_total_bytes_per_response,
         max_search_hits=args.max_search_hits,
+        max_references=args.max_references,
         python_enabled=python_enabled,
     )
     server = create_server(repo_root=args.repo_root, cli_overrides=overrides)

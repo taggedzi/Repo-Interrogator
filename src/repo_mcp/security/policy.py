@@ -15,6 +15,7 @@ class SecurityLimits:
     max_open_lines: int = 500
     max_total_bytes_per_response: int = 256 * 1024
     max_search_hits: int = 50
+    max_references: int = 50
 
 
 @dataclass(slots=True, frozen=True)

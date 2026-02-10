@@ -12,6 +12,7 @@ MAX_FILE_BYTES_CAP = 4 * 1024 * 1024
 MAX_OPEN_LINES_CAP = 2_000
 MAX_TOTAL_BYTES_PER_RESPONSE_CAP = 1024 * 1024
 MAX_SEARCH_HITS_CAP = 200
+MAX_REFERENCES_CAP = 200
 
 DEFAULT_INCLUDE_EXTENSIONS = (
     ".py",
@@ -62,6 +63,7 @@ class ServerConfig:
                 "max_open_lines": self.limits.max_open_lines,
                 "max_total_bytes_per_response": self.limits.max_total_bytes_per_response,
                 "max_search_hits": self.limits.max_search_hits,
+                "max_references": self.limits.max_references,
             },
             "index": {
                 "include_extensions": list(self.index.include_extensions),
@@ -82,6 +84,7 @@ class CliOverrides:
     max_open_lines: int | None = None
     max_total_bytes_per_response: int | None = None
     max_search_hits: int | None = None
+    max_references: int | None = None
     python_enabled: bool | None = None
 
 
@@ -179,6 +182,12 @@ def merge_config(
         base.limits.max_search_hits,
         MAX_SEARCH_HITS_CAP,
     )
+    max_references = _optional_positive_int_with_cap(
+        limits_payload.get("max_references"),
+        "limits.max_references",
+        base.limits.max_references,
+        MAX_REFERENCES_CAP,
+    )
 
     include_extensions = base.index.include_extensions
     if "include_extensions" in index_payload:
@@ -204,6 +213,7 @@ def merge_config(
             max_open_lines=max_open_lines,
             max_total_bytes_per_response=max_total_bytes_per_response,
             max_search_hits=max_search_hits,
+            max_references=max_references,
         ),
         index=IndexConfig(
             include_extensions=include_extensions,
@@ -240,12 +250,19 @@ def apply_cli_overrides(config: ServerConfig, overrides: CliOverrides) -> Server
         config.limits.max_search_hits,
         MAX_SEARCH_HITS_CAP,
     )
+    max_references = _optional_positive_int_with_cap(
+        overrides.max_references,
+        "overrides.max_references",
+        config.limits.max_references,
+        MAX_REFERENCES_CAP,
+    )
 
     limits = SecurityLimits(
         max_file_bytes=max_file_bytes,
         max_open_lines=max_open_lines,
         max_total_bytes_per_response=max_total_bytes_per_response,
         max_search_hits=max_search_hits,
+        max_references=max_references,
     )
     adapters = AdaptersConfig(
         python_enabled=(

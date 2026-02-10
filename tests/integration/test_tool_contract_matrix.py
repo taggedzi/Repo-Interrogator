@@ -22,6 +22,7 @@ def test_tool_contract_matrix_for_required_v1_tools(tmp_path: Path) -> None:
         ("repo.refresh_index", {"force": False}),
         ("repo.search", {"query": "search", "mode": "bm25", "top_k": 5}),
         ("repo.outline", {"path": "src/main.py"}),
+        ("repo.references", {"symbol": "Main.run", "top_k": 5}),
         (
             "repo.build_context_bundle",
             {
@@ -86,3 +87,11 @@ def test_tool_contract_matrix_for_required_v1_tools(tmp_path: Path) -> None:
                     "score",
                     "source_query",
                 }
+        if method == "repo.references":
+            assert response["ok"] is True
+            assert set(response["result"].keys()) == {
+                "symbol",
+                "references",
+                "truncated",
+                "total_candidates",
+            }

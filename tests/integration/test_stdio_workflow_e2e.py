@@ -74,9 +74,23 @@ def test_stdio_workflow_e2e(tmp_path: Path) -> None:
             "parse_token",
         ]
 
-        bundled = _call_tool(
+        references = _call_tool(
             proc,
             "req-e2e-8",
+            "repo.references",
+            {"symbol": "App.run", "top_k": 5},
+        )
+        assert references["ok"] is True
+        assert set(references["result"].keys()) == {
+            "symbol",
+            "references",
+            "truncated",
+            "total_candidates",
+        }
+
+        bundled = _call_tool(
+            proc,
+            "req-e2e-9",
             "repo.build_context_bundle",
             {
                 "prompt": "token parser",
@@ -88,10 +102,11 @@ def test_stdio_workflow_e2e(tmp_path: Path) -> None:
         assert bundled["ok"] is True
         assert bundled["result"]["totals"]["selected_files"] >= 1
 
-        audit = _call_tool(proc, "req-e2e-9", "repo.audit_log", {"limit": 20})
+        audit = _call_tool(proc, "req-e2e-10", "repo.audit_log", {"limit": 20})
         assert audit["ok"] is True
         tools = [entry["tool"] for entry in audit["result"]["entries"]]
         assert "repo.build_context_bundle" in tools
+        assert "repo.references" in tools
         assert "repo.search" in tools
     finally:
         _stop_server(proc)

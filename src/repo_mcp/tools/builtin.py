@@ -32,6 +32,7 @@ def register_builtin_tools(
     search_index: Callable[[str, int, str | None, str | None], list[dict[str, object]]],
     outline_path: Callable[[str], dict[str, object]],
     build_context_bundle: Callable[[dict[str, object]], dict[str, object]],
+    resolve_references: Callable[[dict[str, object]], dict[str, object]],
     config: ServerConfig,
 ) -> None:
     """Register the minimum v1 tool set with deterministic stub behavior."""
@@ -47,6 +48,7 @@ def register_builtin_tools(
         "repo.build_context_bundle",
         _build_context_bundle_handler(build_context_bundle),
     )
+    registry.register("repo.references", _references_handler(limits, resolve_references))
     registry.register("repo.refresh_index", _refresh_index_handler(refresh_index))
     registry.register("repo.audit_log", _audit_log_handler(limits, read_audit_entries))
 
@@ -73,6 +75,7 @@ def _status_handler(
                 "max_open_lines": limits.max_open_lines,
                 "max_total_bytes_per_response": limits.max_total_bytes_per_response,
                 "max_search_hits": limits.max_search_hits,
+                "max_references": limits.max_references,
             },
             "chunking_summary": {
                 "chunk_lines": DEFAULT_CHUNK_LINES,
@@ -263,6 +266,49 @@ def _refresh_index_handler(refresh_index: Callable[[bool], dict[str, object]]) -
         force_value = arguments.get("force", False)
         force = force_value if isinstance(force_value, bool) else False
         return refresh_index(force)
+
+    return handler
+
+
+def _references_handler(
+    limits: SecurityLimits,
+    resolve_references: Callable[[dict[str, object]], dict[str, object]],
+) -> ToolHandler:
+    def handler(arguments: dict[str, object]) -> dict[str, object]:
+        symbol = arguments.get("symbol")
+        path = arguments.get("path")
+        top_k = arguments.get("top_k", limits.max_references)
+
+        if not isinstance(symbol, str) or not symbol.strip():
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.references symbol must be a non-empty string.",
+            )
+        if path is not None and not isinstance(path, str):
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.references path must be a string when provided.",
+            )
+        if isinstance(path, str) and not path.strip():
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.references path must be a non-empty string when provided.",
+            )
+        if isinstance(top_k, int) and top_k > limits.max_references:
+            raise PolicyBlockedError(
+                reason="Requested top_k exceeds max_references limit.",
+                hint="Reduce top_k or adjust the configured references limit.",
+            )
+        if not isinstance(top_k, int) or top_k < 1:
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.references top_k must be an integer >= 1.",
+            )
+
+        payload: dict[str, object] = {"symbol": symbol, "top_k": top_k}
+        if isinstance(path, str):
+            payload["path"] = path.strip()
+        return resolve_references(payload)
 
     return handler
 

@@ -84,3 +84,21 @@ def test_max_total_response_bytes_limit_blocks_oversized_payload(tmp_path: Path)
         "message": "Response exceeds max_total_bytes_per_response limit.",
     }
     assert len(encoded) <= 1200
+
+
+def test_max_references_limit_blocks_large_reference_top_k(tmp_path: Path) -> None:
+    server = create_server(repo_root=str(tmp_path), limits=SecurityLimits(max_references=2))
+
+    response = server.handle_payload(
+        {
+            "id": "req-references",
+            "method": "repo.references",
+            "params": {"symbol": "Service.run", "top_k": 10},
+        }
+    )
+
+    assert response["blocked"] is True
+    assert response["error"] == {
+        "code": "PATH_BLOCKED",
+        "message": "Requested top_k exceeds max_references limit.",
+    }

@@ -37,6 +37,7 @@ def test_repo_status_includes_effective_config_snapshot(tmp_path: Path) -> None:
         "max_open_lines": 33,
         "max_total_bytes_per_response": 4096,
         "max_search_hits": 12,
+        "max_references": 50,
     }
 
     effective = result["effective_config"]
