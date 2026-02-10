@@ -87,6 +87,7 @@ python -m pytest -q
 - `repo.open_file`
 - `repo.outline`
 - `repo.search`
+- `repo.references`
 - `repo.build_context_bundle`
 - `repo.refresh_index`
 - `repo.audit_log`
@@ -107,8 +108,8 @@ python -m pytest -q
 Important limits:
 - Non-Python adapters are lexical. They are deterministic and fast, but conservative.
 - Macro/generated code and advanced language features can be partially represented.
-- Search and context bundle coverage depends on indexed extensions. By default, index includes mostly Python/docs config formats.
-- To include TS/JS/Java/Go/Rust/C++/C# in search and bundling, extend `index.include_extensions` in `repo_mcp.toml`.
+- Search, references, and context bundle coverage depend on indexed extensions/excludes.
+- Start from `examples/repo_mcp.toml` for stack-aware include/exclude defaults and override guidance.
 
 ## Documentation
 

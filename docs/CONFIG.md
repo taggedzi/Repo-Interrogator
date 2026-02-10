@@ -14,8 +14,9 @@ Current defaults:
 - `max_open_lines = 500`
 - `max_total_bytes_per_response = 262_144`
 - `max_search_hits = 50`
-- `index.include_extensions = [.py, .md, .rst, .toml, .yaml, .yml, .json, .ini, .cfg]`
-- `index.exclude_globs = ["**/.git/**", "**/__pycache__/**", "**/.venv/**"]`
+- `max_references = 50`
+- `index.include_extensions = [.py, .js, .jsx, .ts, .tsx, .java, .go, .rs, .c, .h, .cc, .hh, .cpp, .hpp, .cxx, .cs, .md, .rst, .toml, .yaml, .yml, .json, .ini, .cfg]`
+- `index.exclude_globs = ["**/.git/**", "**/.github/**", "**/.venv/**", "**/__pycache__/**", "**/.repo_mcp/**", "**/.mypy_cache/**", "**/.pytest_cache/**", "**/.ruff_cache/**", "**/.tox/**", "**/.nox/**", "**/.cache/**", "**/node_modules/**", "**/.pnpm-store/**", "**/.yarn/**", "**/.npm/**", "**/.next/**", "**/.nuxt/**", "**/.svelte-kit/**", "**/.gradle/**", "**/.idea/**", "**/.vscode/**", "**/dist/**", "**/build/**", "**/target/**", "**/bin/**", "**/obj/**", "**/out/**", "**/coverage/**", "**/tmp/**", "**/temp/**"]`
 - `adapters.python_enabled = true`
 - `data_dir = <repo_root>/.repo_mcp`
 
@@ -31,6 +32,7 @@ Overrides may lower limits freely, or raise only up to these caps:
 - `max_open_lines <= 2_000`
 - `max_total_bytes_per_response <= 1_048_576`
 - `max_search_hits <= 200`
+- `max_references <= 200`
 
 Values above caps fail fast with explicit errors.
 
@@ -48,16 +50,21 @@ max_file_bytes = 1048576
 max_open_lines = 500
 max_total_bytes_per_response = 262144
 max_search_hits = 50
+max_references = 50
 
 [index]
-include_extensions = [".py", ".md", ".rst", ".toml", ".yaml", ".yml", ".json", ".ini", ".cfg"]
-exclude_globs = ["**/.git/**", "**/__pycache__/**", "**/.venv/**"]
+include_extensions = [".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".go", ".rs", ".c", ".h", ".cc", ".hh", ".cpp", ".hpp", ".cxx", ".cs", ".md", ".rst", ".toml", ".yaml", ".yml", ".json", ".ini", ".cfg"]
+exclude_globs = ["**/.git/**", "**/.github/**", "**/.venv/**", "**/__pycache__/**", "**/.repo_mcp/**", "**/.mypy_cache/**", "**/.pytest_cache/**", "**/.ruff_cache/**", "**/.tox/**", "**/.nox/**", "**/.cache/**", "**/node_modules/**", "**/.pnpm-store/**", "**/.yarn/**", "**/.npm/**", "**/.next/**", "**/.nuxt/**", "**/.svelte-kit/**", "**/.gradle/**", "**/.idea/**", "**/.vscode/**", "**/dist/**", "**/build/**", "**/target/**", "**/bin/**", "**/obj/**", "**/out/**", "**/coverage/**", "**/tmp/**", "**/temp/**"]
 
 [adapters]
 python_enabled = true
 ```
 
-Example with multilingual indexing enabled:
+For a complete commented template with stack-specific notes, see:
+
+- `examples/repo_mcp.toml`
+
+Example with targeted multilingual indexing/exclusion overrides:
 
 ```toml
 [index]
@@ -72,7 +79,40 @@ include_extensions = [
   ".cs",
   ".md", ".rst", ".toml", ".yaml", ".yml", ".json", ".ini", ".cfg"
 ]
-exclude_globs = ["**/.git/**", "**/__pycache__/**", "**/.venv/**"]
+exclude_globs = ["**/.git/**", "**/.venv/**", "**/node_modules/**", "**/target/**", "**/.pytest_cache/**"]
+```
+
+Recommended approach:
+
+- Start from `examples/repo_mcp.toml`.
+- Remove excludes only when those paths contain source-of-truth files in your repository.
+
+## Quick Profiles
+
+These presets are starting points. Adjust for your repository layout.
+
+Python-focused repository:
+
+```toml
+[index]
+include_extensions = [".py", ".md", ".rst", ".toml", ".yaml", ".yml", ".json", ".ini", ".cfg"]
+exclude_globs = ["**/.git/**", "**/.github/**", "**/.venv/**", "**/__pycache__/**", "**/.repo_mcp/**", "**/.mypy_cache/**", "**/.pytest_cache/**", "**/.ruff_cache/**", "**/.tox/**", "**/.nox/**", "**/dist/**", "**/build/**", "**/coverage/**", "**/tmp/**", "**/temp/**"]
+```
+
+Node/TypeScript-focused repository:
+
+```toml
+[index]
+include_extensions = [".ts", ".tsx", ".js", ".jsx", ".json", ".md", ".yaml", ".yml", ".toml", ".ini", ".cfg"]
+exclude_globs = ["**/.git/**", "**/.github/**", "**/.repo_mcp/**", "**/node_modules/**", "**/.pnpm-store/**", "**/.yarn/**", "**/.npm/**", "**/.next/**", "**/.nuxt/**", "**/.svelte-kit/**", "**/.cache/**", "**/dist/**", "**/build/**", "**/coverage/**", "**/tmp/**", "**/temp/**"]
+```
+
+Polyglot monorepo (Python + JS/TS + JVM + Rust/.NET/C-family):
+
+```toml
+[index]
+include_extensions = [".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".go", ".rs", ".c", ".h", ".cc", ".hh", ".cpp", ".hpp", ".cxx", ".cs", ".md", ".rst", ".toml", ".yaml", ".yml", ".json", ".ini", ".cfg"]
+exclude_globs = ["**/.git/**", "**/.github/**", "**/.venv/**", "**/__pycache__/**", "**/.repo_mcp/**", "**/.mypy_cache/**", "**/.pytest_cache/**", "**/.ruff_cache/**", "**/.tox/**", "**/.nox/**", "**/.cache/**", "**/node_modules/**", "**/.pnpm-store/**", "**/.yarn/**", "**/.npm/**", "**/.next/**", "**/.nuxt/**", "**/.svelte-kit/**", "**/.gradle/**", "**/.idea/**", "**/.vscode/**", "**/dist/**", "**/build/**", "**/target/**", "**/bin/**", "**/obj/**", "**/out/**", "**/coverage/**", "**/tmp/**", "**/temp/**"]
 ```
 
 ## CLI Overrides
@@ -87,6 +127,7 @@ repo-mcp \
   --max-open-lines 500 \
   --max-total-bytes-per-response 262144 \
   --max-search-hits 50 \
+  --max-references 50 \
   --python-adapter-enabled true
 ```
 
