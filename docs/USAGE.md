@@ -496,6 +496,36 @@ Optional multilingual outline checks:
 }
 ```
 
+## Profiling Workflow Performance
+
+Use the built-in workflow validator profiler when diagnosing bottlenecks:
+
+```bash
+.venv/bin/python scripts/validate_workflow.py --repo-root . --profile
+```
+
+Write a machine-readable profile artifact:
+
+```bash
+.venv/bin/python scripts/validate_workflow.py --repo-root . --profile --profile-output /tmp/validate_profile.json
+```
+
+Capture Python hotspot stats for deeper software profiling:
+
+```bash
+.venv/bin/python scripts/validate_workflow.py --repo-root . --profile --cprofile-output /tmp/validate_profile.pstats
+```
+
+Run repeatable self-repo benchmark profiling (3 runs by default, artifacts in `.repo_mcp/perf/`):
+
+```bash
+.venv/bin/python scripts/benchmark_workflow.py --repo-root .
+```
+
+Notes:
+- Profiling is opt-in and disabled by default.
+- Profiling output is diagnostic metadata only; tool output contracts are unchanged.
+
 ## Language Adapter Limitations
 
 The current non-Python adapters are lexical. This keeps behavior deterministic and dependency-light, but some syntax is intentionally conservative.

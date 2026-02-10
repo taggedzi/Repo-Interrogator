@@ -4,12 +4,16 @@
 from __future__ import annotations
 
 import argparse
+import cProfile
 import json
 import os
+import platform
 import select
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +32,16 @@ class CheckResult:
     actual: str | None = None
 
 
+@dataclass(slots=True)
+class StepTiming:
+    """Timing record for one workflow step."""
+
+    name: str
+    elapsed_seconds: float
+    ok: bool
+    error: str | None = None
+
+
 class WorkflowValidator:
     """Execute requests and validate workflow behavior."""
 
@@ -37,25 +51,33 @@ class WorkflowValidator:
         data_dir: Path | None,
         verbose: bool,
         response_timeout_seconds: float,
+        profile_enabled: bool,
+        profile_output_path: Path | None,
     ) -> None:
         self.repo_root = repo_root.resolve()
         self.data_dir = data_dir.resolve() if data_dir is not None else None
         self.verbose = verbose
         self.response_timeout_seconds = response_timeout_seconds
+        self.profile_enabled = profile_enabled
+        self.profile_output_path = profile_output_path
         self.proc: subprocess.Popen[str] | None = None
         self.results: list[CheckResult] = []
+        self.step_timings: list[StepTiming] = []
+        self.started_at_utc = datetime.now(UTC)
+        self.total_elapsed_seconds = 0.0
 
     def run(self) -> int:
+        start = time.perf_counter()
         self._start_server()
         try:
-            self._step_status()
-            self._step_refresh()
-            search_response = self._step_search()
-            opened_path = self._step_open(search_response)
-            symbol = self._step_outline(opened_path)
-            self._step_references(symbol)
-            self._step_bundle()
-            self._step_audit()
+            self._run_step("repo.status", self._step_status)
+            self._run_step("repo.refresh_index", self._step_refresh)
+            search_response = self._run_step("repo.search", self._step_search)
+            opened_path = self._run_step("repo.open_file", self._step_open, search_response)
+            symbol = self._run_step("repo.outline", self._step_outline, opened_path)
+            self._run_step("repo.references", self._step_references, symbol)
+            self._run_step("repo.build_context_bundle", self._step_bundle)
+            self._run_step("repo.audit_log", self._step_audit)
         except Exception as error:  # pragma: no cover
             self.results.append(
                 CheckResult(
@@ -66,9 +88,35 @@ class WorkflowValidator:
             )
         finally:
             self._stop_server()
+            self.total_elapsed_seconds = time.perf_counter() - start
 
         self._print_summary()
+        self._print_profile_summary()
+        self._write_profile_output()
         return 0 if all(result.ok for result in self.results) else 1
+
+    def _run_step(self, name: str, step: Any, *args: Any) -> Any:
+        started = time.perf_counter()
+        try:
+            result = step(*args)
+        except Exception as error:
+            self.step_timings.append(
+                StepTiming(
+                    name=name,
+                    elapsed_seconds=time.perf_counter() - started,
+                    ok=False,
+                    error=str(error),
+                )
+            )
+            raise
+        self.step_timings.append(
+            StepTiming(
+                name=name,
+                elapsed_seconds=time.perf_counter() - started,
+                ok=True,
+            )
+        )
+        return result
 
     def _start_server(self) -> None:
         env = os.environ.copy()
@@ -732,6 +780,79 @@ class WorkflowValidator:
         failed = len(self.results) - passed
         print(f"\nTotal checks: {len(self.results)} | Passed: {passed} | Failed: {failed}")
 
+    def _print_profile_summary(self) -> None:
+        if not self.profile_enabled:
+            return
+        print("\n=== Profile Summary ===")
+        print(f"Total elapsed seconds: {self.total_elapsed_seconds:.3f}")
+        for timing in self.step_timings:
+            status = "ok" if timing.ok else "failed"
+            suffix = f" error={timing.error}" if timing.error else ""
+            print(f"- {timing.name}: {timing.elapsed_seconds:.3f}s ({status}){suffix}")
+        snapshot = self._system_snapshot()
+        print(
+            "System snapshot: "
+            f"platform={snapshot['platform']}, "
+            f"python={snapshot['python_version']}, "
+            f"cpu_count_logical={snapshot['cpu_count_logical']}, "
+            f"max_rss_kb={snapshot['max_rss_kb']}"
+        )
+
+    def _write_profile_output(self) -> None:
+        if not self.profile_enabled or self.profile_output_path is None:
+            return
+        payload = {
+            "started_at_utc": self.started_at_utc.isoformat(),
+            "repo_root": str(self.repo_root),
+            "total_elapsed_seconds": self.total_elapsed_seconds,
+            "steps": [
+                {
+                    "name": item.name,
+                    "elapsed_seconds": item.elapsed_seconds,
+                    "ok": item.ok,
+                    "error": item.error,
+                }
+                for item in self.step_timings
+            ],
+            "system": self._system_snapshot(),
+            "summary": {
+                "checks_total": len(self.results),
+                "checks_passed": sum(1 for item in self.results if item.ok),
+                "checks_failed": sum(1 for item in self.results if not item.ok),
+            },
+        }
+        self.profile_output_path.parent.mkdir(parents=True, exist_ok=True)
+        self.profile_output_path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        print(f"Profile JSON written to {self.profile_output_path}")
+
+    @staticmethod
+    def _system_snapshot() -> dict[str, object]:
+        max_rss_kb: int | None = None
+        try:
+            import resource  # type: ignore
+
+            max_rss_kb = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        except Exception:  # pragma: no cover - platform dependent
+            max_rss_kb = None
+        load_avg: list[float] | None = None
+        if hasattr(os, "getloadavg"):
+            try:
+                one, five, fifteen = os.getloadavg()
+                load_avg = [one, five, fifteen]
+            except OSError:  # pragma: no cover - platform dependent
+                load_avg = None
+        return {
+            "platform": platform.platform(),
+            "python_version": sys.version.split()[0],
+            "cpu_count_logical": os.cpu_count(),
+            "max_rss_kb": max_rss_kb,
+            "load_avg": load_avg,
+            "pid": os.getpid(),
+        }
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -759,17 +880,49 @@ def parse_args() -> argparse.Namespace:
             f"Default: {DEFAULT_RESPONSE_TIMEOUT_SECONDS:.0f}."
         ),
     )
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="Enable timing profile summary for workflow steps and environment snapshot.",
+    )
+    parser.add_argument(
+        "--profile-output",
+        default=None,
+        help="Optional JSON path for profile output (implies --profile).",
+    )
+    parser.add_argument(
+        "--cprofile-output",
+        default=None,
+        help=(
+            "Optional path to write cProfile .pstats for script-level Python profiling. "
+            "When omitted, cProfile is disabled."
+        ),
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    profile_output = Path(args.profile_output).resolve() if args.profile_output else None
+    profile_enabled = bool(args.profile) or profile_output is not None
     validator = WorkflowValidator(
         repo_root=Path(args.repo_root),
         data_dir=Path(args.data_dir) if args.data_dir else None,
         verbose=args.verbose,
         response_timeout_seconds=args.response_timeout_seconds,
+        profile_enabled=profile_enabled,
+        profile_output_path=profile_output,
     )
+    if args.cprofile_output:
+        profiler = cProfile.Profile()
+        profiler.enable()
+        exit_code = validator.run()
+        profiler.disable()
+        cprofile_path = Path(args.cprofile_output).resolve()
+        cprofile_path.parent.mkdir(parents=True, exist_ok=True)
+        profiler.dump_stats(str(cprofile_path))
+        print(f"cProfile stats written to {cprofile_path}")
+        return exit_code
     return validator.run()
 
 

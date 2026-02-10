@@ -610,6 +610,37 @@ Notes:
   * `last_bundle.md`
     to `data_dir` for human inspection
 
+### 12.1 Performance profiling workflow (v2.6+)
+
+Profiling support is required for diagnosing latency and bottlenecks in deterministic workflows.
+
+Baseline profiling contract:
+
+* Profiling is **opt-in** and disabled by default.
+* Profiling must not change tool outputs or ranking behavior.
+* A maintained workflow profiler script must support:
+  * per-step elapsed timing
+  * total end-to-end elapsed timing
+  * bounded environment snapshot (platform, Python version, CPU count, load average when available, process max RSS)
+  * optional JSON artifact output for offline comparison
+  * optional Python `cProfile` output for software hotspot diagnosis
+* Profiling output must avoid secrets and full file-content dumps.
+
+Baseline benchmark protocol:
+
+* Scope: self-repo benchmark workflow (single target `repo_root`) in baseline mode.
+* Default runs per benchmark invocation: 3.
+* Default benchmark artifact location: `<repo_root>/.repo_mcp/perf/`.
+* Benchmark outputs must include:
+  * per-run profile artifacts
+  * aggregate min/max/mean summaries for total time and per-step timings
+
+Non-goals for baseline profiling:
+
+* always-on production profiling
+* non-deterministic sampling profilers in default workflow
+* external telemetry backends
+
 ---
 
 ## 13. Packaging
