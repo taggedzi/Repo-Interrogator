@@ -103,6 +103,8 @@ class StdioServer:
         ).strip().lower() in {"1", "true", "yes"}
         self._bundler_profile_path = self._data_dir / "perf" / "bundler_profile.jsonl"
         self._bundler_profile_sequence = 0
+        self._reference_source_cache_all: list[tuple[str, str]] | None = None
+        self._reference_source_cache_marker: str | None = None
 
     def serve(self, in_stream: TextIO, out_stream: TextIO) -> None:
         """Process JSON-line requests from stdin and write JSON-line responses."""
@@ -626,6 +628,24 @@ class StdioServer:
                 }
             return [(relative, text)]
 
+        current_marker = self._reference_cache_marker()
+        if (
+            self._reference_source_cache_all is not None
+            and self._reference_source_cache_marker == current_marker
+        ):
+            if profile is not None:
+                profile["candidate_discovery"] = {
+                    "mode": "discover_cache",
+                    "records_discovered": len(self._reference_source_cache_all),
+                    "records_allowed": len(self._reference_source_cache_all),
+                    "records_blocked": 0,
+                    "discover_files_seconds": 0.0,
+                    "policy_seconds": 0.0,
+                    "read_files_seconds": 0.0,
+                    "candidate_discovery_seconds": time.perf_counter() - started,
+                }
+            return self._reference_source_cache_all
+
         files: list[tuple[str, str]] = []
         discover_started = time.perf_counter()
         records = discover_files(self._repo_root, self._config.index)
@@ -662,7 +682,14 @@ class StdioServer:
                 "read_files_seconds": read_seconds,
                 "candidate_discovery_seconds": time.perf_counter() - started,
             }
+        self._reference_source_cache_all = files
+        self._reference_source_cache_marker = current_marker
         return files
+
+    def _reference_cache_marker(self) -> str:
+        status = self._index_manager.status()
+        timestamp = status.last_refresh_timestamp or ""
+        return f"{status.index_status}:{timestamp}:{status.indexed_file_count}"
 
     def _collect_symbol_references(
         self,
@@ -679,12 +706,12 @@ class StdioServer:
         resolver_seconds = 0.0
         resolver_failures = 0
         adapter_stats: dict[str, dict[str, object]] = {}
+        grouped: dict[str, tuple[object, list[tuple[str, str]]]] = {}
         for path in sorted(by_path.keys()):
             select_started = time.perf_counter()
             adapter = self._adapters.select(path)
             select_elapsed = time.perf_counter() - select_started
             select_seconds += select_elapsed
-            resolver = getattr(adapter, "references_for_symbol", None)
             adapter_bucket = adapter_stats.setdefault(
                 adapter.name,
                 {
@@ -699,15 +726,25 @@ class StdioServer:
             adapter_bucket["select_seconds"] = (
                 float(adapter_bucket["select_seconds"]) + select_elapsed
             )
+            grouped_entry = grouped.get(adapter.name)
+            if grouped_entry is None:
+                grouped[adapter.name] = (adapter, list(by_path[path]))
+            else:
+                grouped_entry[1].extend(by_path[path])
+
+        for adapter_name in sorted(grouped.keys()):
+            adapter, adapter_files = grouped[adapter_name]
+            resolver = getattr(adapter, "references_for_symbol", None)
             if not callable(resolver):
                 continue
             resolver_started = time.perf_counter()
             try:
-                resolved = resolver(symbol, by_path[path], top_k=None)
+                resolved = resolver(symbol, adapter_files, top_k=None)
             except Exception:
                 resolver_elapsed = time.perf_counter() - resolver_started
                 resolver_seconds += resolver_elapsed
                 resolver_failures += 1
+                adapter_bucket = adapter_stats[adapter_name]
                 adapter_bucket["resolver_calls"] = int(adapter_bucket["resolver_calls"]) + 1
                 adapter_bucket["resolver_seconds"] = (
                     float(adapter_bucket["resolver_seconds"]) + resolver_elapsed
@@ -716,6 +753,7 @@ class StdioServer:
                 continue
             resolver_elapsed = time.perf_counter() - resolver_started
             resolver_seconds += resolver_elapsed
+            adapter_bucket = adapter_stats[adapter_name]
             adapter_bucket["resolver_calls"] = int(adapter_bucket["resolver_calls"]) + 1
             adapter_bucket["resolver_seconds"] = (
                 float(adapter_bucket["resolver_seconds"]) + resolver_elapsed

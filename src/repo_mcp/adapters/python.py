@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 
 from repo_mcp.adapters.base import (
     OutlineSymbol,
@@ -17,6 +18,11 @@ class PythonAstAdapter:
     """Python-first adapter with AST-based structural outlines."""
 
     name = "python"
+
+    def __init__(self) -> None:
+        self._reference_candidate_cache: dict[
+            str, tuple[str, tuple[tuple[int, str, str, str, str], ...]]
+        ] = {}
 
     def supports_path(self, path: str) -> bool:
         """Return True when path is a Python source file."""
@@ -61,24 +67,41 @@ class PythonAstAdapter:
         for path, text in files:
             if not self.supports_path(path):
                 continue
-            try:
-                tree = ast.parse(text)
-            except (SyntaxError, ValueError):
+            candidates = self._reference_candidates(path=path, text=text)
+            if candidates is None:
                 continue
-            file_collector = _PythonReferenceCollector()
-            file_collector.visit(tree)
             references.extend(
                 _match_references(
                     path=path,
                     symbol=symbol,
                     short_symbol=short_symbol,
-                    candidates=file_collector.candidates,
+                    candidates=candidates,
                 )
             )
         sorted_references = normalize_and_sort_references(references)
         if top_k is None or top_k < 1:
             return sorted_references
         return sorted_references[:top_k]
+
+    def _reference_candidates(
+        self,
+        *,
+        path: str,
+        text: str,
+    ) -> tuple[tuple[int, str, str, str, str], ...] | None:
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        cached = self._reference_candidate_cache.get(path)
+        if cached is not None and cached[0] == digest:
+            return cached[1]
+        try:
+            tree = ast.parse(text)
+        except (SyntaxError, ValueError):
+            return None
+        file_collector = _PythonReferenceCollector()
+        file_collector.visit(tree)
+        candidates = tuple(file_collector.candidates)
+        self._reference_candidate_cache[path] = (digest, candidates)
+        return candidates
 
 
 def _doc_first_line(

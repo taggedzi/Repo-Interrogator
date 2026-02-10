@@ -276,14 +276,17 @@ def _rank_hits(
     prompt_terms: tuple[str, ...],
     reference_lookup_fn: ReferenceLookupFn | None,
 ) -> list[_Hit]:
-    reference_cache: dict[str, tuple[tuple[str, int], ...]] = {}
+    prompt_term_set = set(prompt_terms)
+    reference_cache = _prefetch_reference_pairs(
+        hits=hits,
+        reference_lookup_fn=reference_lookup_fn,
+    )
     ranked_hits = [
         replace(
             hit,
             ranking=_ranking_signals_for_hit(
                 hit,
-                prompt_terms=prompt_terms,
-                reference_lookup_fn=reference_lookup_fn,
+                prompt_term_set=prompt_term_set,
                 reference_cache=reference_cache,
             ),
         )
@@ -292,28 +295,49 @@ def _rank_hits(
     return sorted(ranked_hits, key=_rank_sort_key)
 
 
+def _prefetch_reference_pairs(
+    *,
+    hits: list[_Hit],
+    reference_lookup_fn: ReferenceLookupFn | None,
+) -> dict[str, tuple[tuple[str, int], ...]]:
+    if reference_lookup_fn is None:
+        return {}
+    symbols = sorted(
+        {
+            hit.aligned_symbol
+            for hit in hits
+            if hit.aligned_symbol is not None and hit.aligned_symbol.strip()
+        }
+    )
+    if not symbols:
+        return {}
+    cache: dict[str, tuple[tuple[str, int], ...]] = {}
+    for symbol in symbols:
+        cache[symbol] = _normalize_reference_pairs(reference_lookup_fn(symbol))
+    return cache
+
+
 def _ranking_signals_for_hit(
     hit: _Hit,
     *,
-    prompt_terms: tuple[str, ...],
-    reference_lookup_fn: ReferenceLookupFn | None,
+    prompt_term_set: set[str],
     reference_cache: dict[str, tuple[tuple[str, int], ...]],
 ) -> _RankingSignals:
-    prompt_term_set = set(prompt_terms)
     aligned_tokens = set()
     if hit.aligned_symbol is not None:
         aligned_tokens = set(tokenize(hit.aligned_symbol.replace(".", " ")))
     definition_match = bool(prompt_term_set & aligned_tokens)
     reference_count_in_range = 0
     min_definition_distance = 10**9
-    if reference_lookup_fn is not None and hit.aligned_symbol is not None:
+    if hit.aligned_symbol is not None:
         references = reference_cache.get(hit.aligned_symbol)
-        if references is None:
-            references = _normalize_reference_pairs(reference_lookup_fn(hit.aligned_symbol))
-            reference_cache[hit.aligned_symbol] = references
-        reference_count_in_range, min_definition_distance = _reference_proximity_for_hit(
-            hit, references
-        )
+        if references is not None:
+            reference_count_in_range, min_definition_distance = _reference_proximity_for_hit(
+                hit, references
+            )
+        else:
+            reference_count_in_range = 0
+            min_definition_distance = 10**9
 
     return _RankingSignals(
         definition_match=definition_match,

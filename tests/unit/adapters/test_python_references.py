@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+
 from repo_mcp.adapters import PythonAstAdapter
 
 
@@ -112,3 +114,35 @@ def call() -> None:
 
     assert len(references) == 1
     assert references[0].path == "src/b.py"
+
+
+def test_python_references_reuses_cached_candidates_between_symbols(monkeypatch) -> None:
+    files = [
+        (
+            "src/a.py",
+            """
+class Service:
+    def run(self) -> int:
+        return 1
+
+def call() -> int:
+    return Service().run()
+""",
+        )
+    ]
+    parse_calls = 0
+    original_parse = ast.parse
+
+    def wrapped_parse(*args, **kwargs):
+        nonlocal parse_calls
+        parse_calls += 1
+        return original_parse(*args, **kwargs)
+
+    monkeypatch.setattr(ast, "parse", wrapped_parse)
+    adapter = PythonAstAdapter()
+    first = adapter.references_for_symbol("Service", files)
+    second = adapter.references_for_symbol("Service.run", files)
+
+    assert first
+    assert second
+    assert parse_calls == 1
