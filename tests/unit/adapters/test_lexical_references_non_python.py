@@ -230,3 +230,35 @@ svc.run("a");
     assert first[0].path == "src/a.ts"
     assert first[-1].path == "src\\b.ts"
     assert limited == first[:2]
+
+
+def test_non_python_lexical_batch_references_match_single_symbol_results() -> None:
+    adapter = TypeScriptJavaScriptLexicalAdapter()
+    files = [
+        (
+            "src/service.ts",
+            """
+export class Service {
+  run(input: string): string {
+    return input;
+  }
+}
+""",
+        ),
+        (
+            "src/app.ts",
+            """
+import { Service } from "./service";
+const svc = new Service();
+svc.run("ok");
+helper();
+""",
+        ),
+    ]
+
+    batch = adapter.references_for_symbols(["Service.run", "helper"], files)
+    single_service = adapter.references_for_symbol("Service.run", files)
+    single_helper = adapter.references_for_symbol("helper", files)
+
+    assert batch["Service.run"] == single_service
+    assert batch["helper"] == single_helper

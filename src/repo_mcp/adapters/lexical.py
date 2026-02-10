@@ -241,17 +241,36 @@ def references_for_symbol_lexical(
     top_k: int | None = None,
 ) -> list[SymbolReference]:
     """Extract deterministic lexical references for one symbol over supported files."""
-    normalized_symbol = symbol.strip()
-    if not normalized_symbol:
+    results = references_for_symbols_lexical(
+        symbols=[symbol],
+        files=files,
+        supports_path=supports_path,
+        top_k=top_k,
+    )
+    normalized = symbol.strip()
+    if not normalized:
         return []
+    return results.get(normalized, [])
 
-    symbol_parts = [part for part in re.split(r"[.:]+", normalized_symbol) if part]
-    if not symbol_parts:
-        return []
-    short_symbol = symbol_parts[-1]
-    short_pattern = re.compile(_SYMBOL_BOUNDARY_TEMPLATE.format(token=re.escape(short_symbol)))
-    sequence_pattern = _build_symbol_sequence_pattern(symbol_parts)
-    references: list[SymbolReference] = []
+
+def references_for_symbols_lexical(
+    symbols: list[str],
+    files: list[tuple[str, str]],
+    *,
+    supports_path: Callable[[str], bool],
+    top_k: int | None = None,
+) -> dict[str, list[SymbolReference]]:
+    """Extract deterministic lexical references for many symbols over supported files."""
+    symbol_infos = _normalize_symbol_infos(symbols)
+    if not symbol_infos:
+        return {}
+
+    references_by_symbol: dict[str, list[SymbolReference]] = {
+        info.normalized: [] for info in symbol_infos
+    }
+    symbols_by_short: dict[str, list[_LexicalSymbolInfo]] = {}
+    for info in symbol_infos:
+        symbols_by_short.setdefault(info.short_symbol, []).append(info)
 
     for path, text in files:
         if not supports_path(path):
@@ -259,39 +278,95 @@ def references_for_symbol_lexical(
         masked = mask_comments_and_strings(text)
         original_lines = text.splitlines()
         masked_lines = masked.splitlines()
-        for line_no, (masked_line, original_line) in enumerate(
-            zip(masked_lines, original_lines, strict=True),
-            start=1,
-        ):
-            if not _line_mentions_symbol(
-                masked_line=masked_line,
-                short_pattern=short_pattern,
-                sequence_pattern=sequence_pattern,
-                short_symbol=short_symbol,
-            ):
+        line_index = _index_lines_by_identifier(masked_lines, original_lines)
+        for short_symbol in sorted(symbols_by_short.keys()):
+            candidates = line_index.get(short_symbol)
+            if not candidates:
                 continue
-            if _is_probable_symbol_declaration(masked_line, short_symbol):
-                continue
-            kind, confidence = _classify_reference(masked_line, short_symbol)
-            evidence = _evidence_from_line(original_line)
-            if not evidence:
-                continue
-            references.append(
-                SymbolReference(
-                    symbol=normalized_symbol,
-                    path=path,
-                    line=line_no,
-                    kind=kind,
-                    evidence=evidence,
-                    strategy="lexical",
-                    confidence=confidence,
-                )
-            )
+            for info in symbols_by_short[short_symbol]:
+                symbol_references = references_by_symbol[info.normalized]
+                for line_no, masked_line, original_line in candidates:
+                    if not _line_mentions_symbol(
+                        masked_line=masked_line,
+                        short_pattern=info.short_pattern,
+                        sequence_pattern=info.sequence_pattern,
+                        short_symbol=info.short_symbol,
+                    ):
+                        continue
+                    if _is_probable_symbol_declaration(masked_line, info.short_symbol):
+                        continue
+                    kind, confidence = _classify_reference(masked_line, info.short_symbol)
+                    evidence = _evidence_from_line(original_line)
+                    if not evidence:
+                        continue
+                    symbol_references.append(
+                        SymbolReference(
+                            symbol=info.normalized,
+                            path=path,
+                            line=line_no,
+                            kind=kind,
+                            evidence=evidence,
+                            strategy="lexical",
+                            confidence=confidence,
+                        )
+                    )
 
-    sorted_references = normalize_and_sort_references(references)
-    if top_k is None or top_k < 1:
-        return sorted_references
-    return sorted_references[:top_k]
+    output: dict[str, list[SymbolReference]] = {}
+    for info in symbol_infos:
+        sorted_references = normalize_and_sort_references(references_by_symbol[info.normalized])
+        if top_k is not None and top_k >= 1:
+            sorted_references = sorted_references[:top_k]
+        output[info.normalized] = sorted_references
+    return output
+
+
+@dataclass(slots=True, frozen=True)
+class _LexicalSymbolInfo:
+    normalized: str
+    short_symbol: str
+    short_pattern: re.Pattern[str]
+    sequence_pattern: re.Pattern[str] | None
+
+
+def _normalize_symbol_infos(symbols: list[str]) -> list[_LexicalSymbolInfo]:
+    infos: list[_LexicalSymbolInfo] = []
+    seen: set[str] = set()
+    for symbol in symbols:
+        normalized = symbol.strip()
+        if not normalized or normalized in seen:
+            continue
+        parts = [part for part in re.split(r"[.:]+", normalized) if part]
+        if not parts:
+            continue
+        short_symbol = parts[-1]
+        infos.append(
+            _LexicalSymbolInfo(
+                normalized=normalized,
+                short_symbol=short_symbol,
+                short_pattern=re.compile(
+                    _SYMBOL_BOUNDARY_TEMPLATE.format(token=re.escape(short_symbol))
+                ),
+                sequence_pattern=_build_symbol_sequence_pattern(parts),
+            )
+        )
+        seen.add(normalized)
+    infos.sort(key=lambda item: item.normalized)
+    return infos
+
+
+def _index_lines_by_identifier(
+    masked_lines: list[str],
+    original_lines: list[str],
+) -> dict[str, list[tuple[int, str, str]]]:
+    indexed: dict[str, list[tuple[int, str, str]]] = {}
+    for line_no, (masked_line, original_line) in enumerate(
+        zip(masked_lines, original_lines, strict=True),
+        start=1,
+    ):
+        tokens = {match.group(0) for match in _IDENTIFIER_PATTERN.finditer(masked_line)}
+        for token in sorted(tokens):
+            indexed.setdefault(token, []).append((line_no, masked_line, original_line))
+    return indexed
 
 
 def _match_any(text: str, index: int, markers: tuple[str, ...]) -> str | None:

@@ -53,6 +53,13 @@ class ReferenceLookupFn(Protocol):
         """Return declaration-linked reference records for one symbol."""
 
 
+class ReferenceLookupManyFn(Protocol):
+    """Batch reference lookup callback for deterministic ranking signals."""
+
+    def __call__(self, symbols: list[str]) -> dict[str, list[dict[str, object]]]:
+        """Return declaration-linked reference records grouped by symbol."""
+
+
 class BundleProfileSink(Protocol):
     """Optional callback used for targeted bundler profiling payloads."""
 
@@ -71,6 +78,7 @@ def build_context_bundle(
     top_k_per_query: int = 20,
     outline_fn: OutlineFn | None = None,
     reference_lookup_fn: ReferenceLookupFn | None = None,
+    reference_lookup_many_fn: ReferenceLookupManyFn | None = None,
     profile_sink: BundleProfileSink | None = None,
 ) -> BundleResult:
     """Build deterministic context bundle using multi-query search and budgets."""
@@ -108,6 +116,7 @@ def build_context_bundle(
         deduped,
         prompt_terms=prompt_terms,
         reference_lookup_fn=reference_lookup_fn,
+        reference_lookup_many_fn=reference_lookup_many_fn,
     )
     ranking_seconds = time.perf_counter() - ranking_started
 
@@ -275,11 +284,13 @@ def _rank_hits(
     *,
     prompt_terms: tuple[str, ...],
     reference_lookup_fn: ReferenceLookupFn | None,
+    reference_lookup_many_fn: ReferenceLookupManyFn | None,
 ) -> list[_Hit]:
     prompt_term_set = set(prompt_terms)
     reference_cache = _prefetch_reference_pairs(
         hits=hits,
         reference_lookup_fn=reference_lookup_fn,
+        reference_lookup_many_fn=reference_lookup_many_fn,
     )
     ranked_hits = [
         replace(
@@ -299,9 +310,8 @@ def _prefetch_reference_pairs(
     *,
     hits: list[_Hit],
     reference_lookup_fn: ReferenceLookupFn | None,
+    reference_lookup_many_fn: ReferenceLookupManyFn | None,
 ) -> dict[str, tuple[tuple[str, int], ...]]:
-    if reference_lookup_fn is None:
-        return {}
     symbols = sorted(
         {
             hit.aligned_symbol
@@ -310,6 +320,15 @@ def _prefetch_reference_pairs(
         }
     )
     if not symbols:
+        return {}
+    if reference_lookup_many_fn is not None:
+        grouped = reference_lookup_many_fn(symbols)
+        cache: dict[str, tuple[tuple[str, int], ...]] = {}
+        for symbol in symbols:
+            payload = grouped.get(symbol, [])
+            cache[symbol] = _normalize_reference_pairs(payload)
+        return cache
+    if reference_lookup_fn is None:
         return {}
     cache: dict[str, tuple[tuple[str, int], ...]] = {}
     for symbol in symbols:

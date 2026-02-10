@@ -9,6 +9,7 @@ from repo_mcp.adapters.base import OutlineSymbol, SymbolReference, normalize_and
 from repo_mcp.adapters.lexical import (
     mask_comments_and_strings,
     references_for_symbol_lexical,
+    references_for_symbols_lexical,
     scan_brace_blocks,
 )
 
@@ -143,6 +144,21 @@ class CSharpLexicalAdapter:
         """Return deterministic lexical references for one symbol in C# files."""
         return references_for_symbol_lexical(
             symbol=symbol,
+            files=files,
+            supports_path=self.supports_path,
+            top_k=top_k,
+        )
+
+    def references_for_symbols(
+        self,
+        symbols: list[str],
+        files: list[tuple[str, str]],
+        *,
+        top_k: int | None = None,
+    ) -> dict[str, list[SymbolReference]]:
+        """Return deterministic lexical references for many symbols in C# files."""
+        return references_for_symbols_lexical(
+            symbols=symbols,
             files=files,
             supports_path=self.supports_path,
             top_k=top_k,

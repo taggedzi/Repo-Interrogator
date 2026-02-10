@@ -46,3 +46,73 @@ def test_ranking_skips_reference_lookup_for_unaligned_hits() -> None:
 
     assert bundle.selections
     assert lookup_calls == 0
+
+
+def test_ranking_prefers_batch_reference_lookup_when_available() -> None:
+    def search_fn(
+        query: str,
+        top_k: int,
+        file_glob: str | None = None,
+        path_prefix: str | None = None,
+    ) -> list[dict[str, object]]:
+        _ = query
+        _ = top_k
+        _ = file_glob
+        _ = path_prefix
+        return [
+            {
+                "path": "src/service.py",
+                "start_line": 10,
+                "end_line": 12,
+                "score": 2.0,
+                "matched_terms": ["service", "run"],
+            },
+            {
+                "path": "src/helper.py",
+                "start_line": 20,
+                "end_line": 22,
+                "score": 1.0,
+                "matched_terms": ["helper", "run"],
+            },
+        ]
+
+    def read_lines_fn(path: str, start_line: int, end_line: int) -> list[str]:
+        return [f"{path}:{line}" for line in range(start_line, end_line + 1)]
+
+    def outline_fn(path: str) -> list[dict[str, object]]:
+        if path == "src/service.py":
+            return [{"kind": "method", "name": "Service.run", "start_line": 10, "end_line": 12}]
+        if path == "src/helper.py":
+            return [{"kind": "function", "name": "Helper.run", "start_line": 20, "end_line": 22}]
+        return []
+
+    single_calls = 0
+    batch_calls = 0
+
+    def reference_lookup_fn(symbol: str) -> list[dict[str, object]]:
+        nonlocal single_calls
+        _ = symbol
+        single_calls += 1
+        return []
+
+    def reference_lookup_many_fn(symbols: list[str]) -> dict[str, list[dict[str, object]]]:
+        nonlocal batch_calls
+        batch_calls += 1
+        return {
+            symbol: [{"path": "src/service.py", "line": 11}] if symbol == "Service.run" else []
+            for symbol in symbols
+        }
+
+    bundle = build_context_bundle(
+        prompt="service run",
+        budget=BundleBudget(max_files=3, max_total_lines=30),
+        search_fn=search_fn,
+        read_lines_fn=read_lines_fn,
+        outline_fn=outline_fn,
+        reference_lookup_fn=reference_lookup_fn,
+        reference_lookup_many_fn=reference_lookup_many_fn,
+    )
+
+    assert bundle.selections
+    assert batch_calls == 1
+    assert single_calls == 0

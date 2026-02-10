@@ -519,6 +519,7 @@ class StdioServer:
             read_lines_fn=self._read_repo_lines,
             outline_fn=self._bundle_outline_symbols,
             reference_lookup_fn=self._bundle_reference_lookup(),
+            reference_lookup_many_fn=self._bundle_reference_lookup_many(),
             include_tests=include_tests,
             strategy="hybrid",
             top_k_per_query=self._limits.max_search_hits,
@@ -697,17 +698,67 @@ class StdioServer:
         files: list[tuple[str, str]],
         profile: dict[str, object] | None = None,
     ) -> list[SymbolReference]:
-        by_path: dict[str, list[tuple[str, str]]] = {}
-        for path, text in files:
-            by_path.setdefault(path, []).append((path, text))
+        grouped, select_seconds, adapter_stats = self._group_reference_files_by_adapter(files)
+        symbols = [symbol]
+        per_symbol, resolver_seconds, resolver_failures = (
+            self._resolve_references_for_grouped_adapters(
+                symbols=symbols,
+                grouped=grouped,
+                adapter_stats=adapter_stats,
+            )
+        )
+        normalize_started = time.perf_counter()
+        normalized = normalize_and_sort_references(per_symbol.get(symbol, []))
+        normalize_elapsed = time.perf_counter() - normalize_started
+        if profile is not None:
+            profile["adapter_resolution"] = {
+                "unique_paths": len(files),
+                "adapter_select_seconds": select_seconds,
+                "resolver_seconds": resolver_seconds,
+                "resolver_failures": resolver_failures,
+                "normalize_sort_seconds": normalize_elapsed,
+                "adapters": {
+                    name: {
+                        "paths": int(values["paths"]),
+                        "select_seconds": float(values["select_seconds"]),
+                        "resolver_calls": int(values["resolver_calls"]),
+                        "resolver_seconds": float(values["resolver_seconds"]),
+                        "resolver_failures": int(values["resolver_failures"]),
+                    }
+                    for name, values in sorted(adapter_stats.items())
+                },
+            }
+        return normalized
 
-        references: list[SymbolReference] = []
-        select_seconds = 0.0
-        resolver_seconds = 0.0
-        resolver_failures = 0
-        adapter_stats: dict[str, dict[str, object]] = {}
+    def _collect_symbol_references_many(
+        self,
+        symbols: list[str],
+        files: list[tuple[str, str]],
+    ) -> dict[str, list[SymbolReference]]:
+        normalized_symbols = sorted({item.strip() for item in symbols if item.strip()})
+        if not normalized_symbols:
+            return {}
+        grouped, _, adapter_stats = self._group_reference_files_by_adapter(files)
+        per_symbol, _, _ = self._resolve_references_for_grouped_adapters(
+            symbols=normalized_symbols,
+            grouped=grouped,
+            adapter_stats=adapter_stats,
+        )
+        return {
+            symbol: normalize_and_sort_references(per_symbol.get(symbol, []))
+            for symbol in normalized_symbols
+        }
+
+    def _group_reference_files_by_adapter(
+        self,
+        files: list[tuple[str, str]],
+    ) -> tuple[
+        dict[str, tuple[object, list[tuple[str, str]]]], float, dict[str, dict[str, object]]
+    ]:
         grouped: dict[str, tuple[object, list[tuple[str, str]]]] = {}
-        for path in sorted(by_path.keys()):
+        select_seconds = 0.0
+        adapter_stats: dict[str, dict[str, object]] = {}
+        for path, text in sorted(files, key=lambda item: item[0]):
             select_started = time.perf_counter()
             adapter = self._adapters.select(path)
             select_elapsed = time.perf_counter() - select_started
@@ -728,59 +779,80 @@ class StdioServer:
             )
             grouped_entry = grouped.get(adapter.name)
             if grouped_entry is None:
-                grouped[adapter.name] = (adapter, list(by_path[path]))
+                grouped[adapter.name] = (adapter, [(path, text)])
             else:
-                grouped_entry[1].extend(by_path[path])
+                grouped_entry[1].append((path, text))
+        return grouped, select_seconds, adapter_stats
 
+    def _resolve_references_for_grouped_adapters(
+        self,
+        *,
+        symbols: list[str],
+        grouped: dict[str, tuple[object, list[tuple[str, str]]]],
+        adapter_stats: dict[str, dict[str, object]],
+    ) -> tuple[dict[str, list[SymbolReference]], float, int]:
+        references_by_symbol: dict[str, list[SymbolReference]] = {symbol: [] for symbol in symbols}
+        resolver_seconds = 0.0
+        resolver_failures = 0
         for adapter_name in sorted(grouped.keys()):
             adapter, adapter_files = grouped[adapter_name]
-            resolver = getattr(adapter, "references_for_symbol", None)
-            if not callable(resolver):
-                continue
-            resolver_started = time.perf_counter()
-            try:
-                resolved = resolver(symbol, adapter_files, top_k=None)
-            except Exception:
+            adapter_bucket = adapter_stats[adapter_name]
+            resolver_many = getattr(adapter, "references_for_symbols", None)
+            resolver_single = getattr(adapter, "references_for_symbol", None)
+            if callable(resolver_many):
+                resolver_started = time.perf_counter()
+                try:
+                    resolved_many = resolver_many(symbols, adapter_files, top_k=None)
+                except Exception:
+                    resolver_elapsed = time.perf_counter() - resolver_started
+                    resolver_seconds += resolver_elapsed
+                    resolver_failures += 1
+                    adapter_bucket["resolver_calls"] = int(adapter_bucket["resolver_calls"]) + 1
+                    adapter_bucket["resolver_seconds"] = (
+                        float(adapter_bucket["resolver_seconds"]) + resolver_elapsed
+                    )
+                    adapter_bucket["resolver_failures"] = (
+                        int(adapter_bucket["resolver_failures"]) + 1
+                    )
+                    continue
                 resolver_elapsed = time.perf_counter() - resolver_started
                 resolver_seconds += resolver_elapsed
-                resolver_failures += 1
-                adapter_bucket = adapter_stats[adapter_name]
                 adapter_bucket["resolver_calls"] = int(adapter_bucket["resolver_calls"]) + 1
                 adapter_bucket["resolver_seconds"] = (
                     float(adapter_bucket["resolver_seconds"]) + resolver_elapsed
                 )
-                adapter_bucket["resolver_failures"] = int(adapter_bucket["resolver_failures"]) + 1
+                if isinstance(resolved_many, dict):
+                    for symbol in symbols:
+                        references = resolved_many.get(symbol, [])
+                        if isinstance(references, list):
+                            references_by_symbol[symbol].extend(references)
                 continue
-            resolver_elapsed = time.perf_counter() - resolver_started
-            resolver_seconds += resolver_elapsed
-            adapter_bucket = adapter_stats[adapter_name]
-            adapter_bucket["resolver_calls"] = int(adapter_bucket["resolver_calls"]) + 1
-            adapter_bucket["resolver_seconds"] = (
-                float(adapter_bucket["resolver_seconds"]) + resolver_elapsed
-            )
-            references.extend(resolved)
-        normalize_started = time.perf_counter()
-        normalized = normalize_and_sort_references(references)
-        normalize_elapsed = time.perf_counter() - normalize_started
-        if profile is not None:
-            profile["adapter_resolution"] = {
-                "unique_paths": len(by_path),
-                "adapter_select_seconds": select_seconds,
-                "resolver_seconds": resolver_seconds,
-                "resolver_failures": resolver_failures,
-                "normalize_sort_seconds": normalize_elapsed,
-                "adapters": {
-                    name: {
-                        "paths": int(values["paths"]),
-                        "select_seconds": float(values["select_seconds"]),
-                        "resolver_calls": int(values["resolver_calls"]),
-                        "resolver_seconds": float(values["resolver_seconds"]),
-                        "resolver_failures": int(values["resolver_failures"]),
-                    }
-                    for name, values in sorted(adapter_stats.items())
-                },
-            }
-        return normalized
+            if not callable(resolver_single):
+                continue
+            for symbol in symbols:
+                resolver_started = time.perf_counter()
+                try:
+                    resolved = resolver_single(symbol, adapter_files, top_k=None)
+                except Exception:
+                    resolver_elapsed = time.perf_counter() - resolver_started
+                    resolver_seconds += resolver_elapsed
+                    resolver_failures += 1
+                    adapter_bucket["resolver_calls"] = int(adapter_bucket["resolver_calls"]) + 1
+                    adapter_bucket["resolver_seconds"] = (
+                        float(adapter_bucket["resolver_seconds"]) + resolver_elapsed
+                    )
+                    adapter_bucket["resolver_failures"] = (
+                        int(adapter_bucket["resolver_failures"]) + 1
+                    )
+                    continue
+                resolver_elapsed = time.perf_counter() - resolver_started
+                resolver_seconds += resolver_elapsed
+                adapter_bucket["resolver_calls"] = int(adapter_bucket["resolver_calls"]) + 1
+                adapter_bucket["resolver_seconds"] = (
+                    float(adapter_bucket["resolver_seconds"]) + resolver_elapsed
+                )
+                references_by_symbol[symbol].extend(resolved)
+        return references_by_symbol, resolver_seconds, resolver_failures
 
     def _write_references_profile(self, payload: dict[str, object]) -> None:
         if not self._reference_profile_enabled:
@@ -870,6 +942,30 @@ class StdioServer:
             payload = [asdict(item) for item in references]
             symbol_cache[symbol] = payload
             return payload
+
+        return lookup
+
+    def _bundle_reference_lookup_many(
+        self,
+    ) -> Callable[[list[str]], dict[str, list[dict[str, object]]]]:
+        """Build deterministic batch reference lookup closure for bundle ranking."""
+        files_cache: list[tuple[str, str]] | None = None
+        symbol_cache: dict[str, list[dict[str, object]]] = {}
+
+        def lookup(symbols: list[str]) -> dict[str, list[dict[str, object]]]:
+            nonlocal files_cache
+            normalized = sorted({symbol.strip() for symbol in symbols if symbol.strip()})
+            if not normalized:
+                return {}
+            missing = [symbol for symbol in normalized if symbol not in symbol_cache]
+            if missing:
+                if files_cache is None:
+                    files_cache = self._reference_source_files(None)
+                resolved = self._collect_symbol_references_many(missing, files_cache)
+                for symbol in missing:
+                    payload = [asdict(item) for item in resolved.get(symbol, [])]
+                    symbol_cache[symbol] = payload
+            return {symbol: symbol_cache.get(symbol, []) for symbol in normalized}
 
         return lookup
 

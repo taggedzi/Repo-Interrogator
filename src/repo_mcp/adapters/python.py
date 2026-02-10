@@ -59,29 +59,71 @@ class PythonAstAdapter:
         top_k: int | None = None,
     ) -> list[SymbolReference]:
         """Return deterministic usage references for one symbol across Python files."""
-        if not symbol.strip():
+        normalized = symbol.strip()
+        if not normalized:
             return []
+        results = self.references_for_symbols([normalized], files, top_k=top_k)
+        return results.get(normalized, [])
 
-        short_symbol = symbol.rsplit(".", 1)[-1]
-        references: list[SymbolReference] = []
+    def references_for_symbols(
+        self,
+        symbols: list[str],
+        files: list[tuple[str, str]],
+        *,
+        top_k: int | None = None,
+    ) -> dict[str, list[SymbolReference]]:
+        """Return deterministic usage references for many symbols across Python files."""
+        symbol_infos = _normalize_symbols(symbols)
+        if not symbol_infos:
+            return {}
+
+        references_by_symbol: dict[str, list[SymbolReference]] = {
+            symbol: [] for symbol, _ in symbol_infos
+        }
+        symbols_by_short: dict[str, list[str]] = {}
+        for symbol, short in symbol_infos:
+            symbols_by_short.setdefault(short, []).append(symbol)
+
         for path, text in files:
             if not self.supports_path(path):
                 continue
             candidates = self._reference_candidates(path=path, text=text)
             if candidates is None:
                 continue
-            references.extend(
-                _match_references(
-                    path=path,
-                    symbol=symbol,
-                    short_symbol=short_symbol,
-                    candidates=candidates,
-                )
-            )
-        sorted_references = normalize_and_sort_references(references)
-        if top_k is None or top_k < 1:
-            return sorted_references
-        return sorted_references[:top_k]
+            for line, candidate, kind, evidence, confidence in candidates:
+                candidate_short = candidate.rsplit(".", 1)[-1]
+                candidate_symbols = symbols_by_short.get(candidate_short)
+                if not candidate_symbols:
+                    continue
+                for symbol in candidate_symbols:
+                    if not _candidate_matches_symbol(
+                        candidate=candidate,
+                        symbol=symbol,
+                        short_symbol=candidate_short,
+                    ):
+                        continue
+                    adjusted_confidence = confidence
+                    if candidate != symbol and candidate.endswith(f".{candidate_short}"):
+                        adjusted_confidence = "medium"
+                    references_by_symbol[symbol].append(
+                        SymbolReference(
+                            symbol=symbol,
+                            path=path,
+                            line=line,
+                            kind=kind,
+                            evidence=evidence,
+                            strategy="ast",
+                            confidence=adjusted_confidence,
+                        )
+                    )
+
+        result: dict[str, list[SymbolReference]] = {}
+        for symbol, _ in symbol_infos:
+            sorted_references = normalize_and_sort_references(references_by_symbol[symbol])
+            if top_k is not None and top_k >= 1:
+                sorted_references = sorted_references[:top_k]
+            result[symbol] = sorted_references
+        return result
 
     def _reference_candidates(
         self,
@@ -312,6 +354,19 @@ def _match_references(
             )
         )
     return references
+
+
+def _normalize_symbols(symbols: list[str]) -> list[tuple[str, str]]:
+    seen: set[str] = set()
+    normalized: list[tuple[str, str]] = []
+    for symbol in symbols:
+        value = symbol.strip()
+        if not value or value in seen:
+            continue
+        normalized.append((value, value.rsplit(".", 1)[-1]))
+        seen.add(value)
+    normalized.sort(key=lambda item: item[0])
+    return normalized
 
 
 def _candidate_matches_symbol(candidate: str, symbol: str, short_symbol: str) -> bool:
