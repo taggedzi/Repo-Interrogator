@@ -3,9 +3,18 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 
+from repo_mcp.adapters.base import SymbolReference, normalize_and_sort_references
+
 _IDENTIFIER_PATTERN = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*")
+_SYMBOL_BOUNDARY_TEMPLATE = r"(?<![A-Za-z0-9_$]){token}(?![A-Za-z0-9_$])"
+_IMPORT_HINT_RE = re.compile(r"\b(import|from|using|use|require|include)\b")
+_INHERITANCE_HINT_RE = re.compile(r"\b(extends|implements|inherits|:\s*public|:\s*private)\b")
+_DECLARATION_HINT_RE = re.compile(
+    r"\b(class|struct|interface|enum|record|trait|type|namespace|package|module|impl|func|fn|def)\b"
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -224,6 +233,67 @@ def scan_brace_blocks(
     )
 
 
+def references_for_symbol_lexical(
+    symbol: str,
+    files: list[tuple[str, str]],
+    *,
+    supports_path: Callable[[str], bool],
+    top_k: int | None = None,
+) -> list[SymbolReference]:
+    """Extract deterministic lexical references for one symbol over supported files."""
+    normalized_symbol = symbol.strip()
+    if not normalized_symbol:
+        return []
+
+    symbol_parts = [part for part in re.split(r"[.:]+", normalized_symbol) if part]
+    if not symbol_parts:
+        return []
+    short_symbol = symbol_parts[-1]
+    short_pattern = re.compile(_SYMBOL_BOUNDARY_TEMPLATE.format(token=re.escape(short_symbol)))
+    sequence_pattern = _build_symbol_sequence_pattern(symbol_parts)
+    references: list[SymbolReference] = []
+
+    for path, text in files:
+        if not supports_path(path):
+            continue
+        masked = mask_comments_and_strings(text)
+        original_lines = text.splitlines()
+        masked_lines = masked.splitlines()
+        for line_no, (masked_line, original_line) in enumerate(
+            zip(masked_lines, original_lines, strict=True),
+            start=1,
+        ):
+            if not _line_mentions_symbol(
+                masked_line=masked_line,
+                short_pattern=short_pattern,
+                sequence_pattern=sequence_pattern,
+                short_symbol=short_symbol,
+            ):
+                continue
+            if _is_probable_symbol_declaration(masked_line, short_symbol):
+                continue
+            kind, confidence = _classify_reference(masked_line, short_symbol)
+            evidence = _evidence_from_line(original_line)
+            if not evidence:
+                continue
+            references.append(
+                SymbolReference(
+                    symbol=normalized_symbol,
+                    path=path,
+                    line=line_no,
+                    kind=kind,
+                    evidence=evidence,
+                    strategy="lexical",
+                    confidence=confidence,
+                )
+            )
+
+    sorted_references = normalize_and_sort_references(references)
+    if top_k is None or top_k < 1:
+        return sorted_references
+    return sorted_references[:top_k]
+
+
 def _match_any(text: str, index: int, markers: tuple[str, ...]) -> str | None:
     for marker in markers:
         if text.startswith(marker, index):
@@ -251,3 +321,55 @@ def _is_escaped(text: str, index: int, marker: str, escape_char: str) -> bool:
         backslashes += 1
         cursor -= 1
     return backslashes % 2 == 1
+
+
+def _build_symbol_sequence_pattern(parts: list[str]) -> re.Pattern[str] | None:
+    if len(parts) < 2:
+        return None
+    sep = r"\s*(?:\.|::)\s*"
+    sequence = sep.join(re.escape(part) for part in parts)
+    return re.compile(_SYMBOL_BOUNDARY_TEMPLATE.format(token=sequence))
+
+
+def _line_mentions_symbol(
+    *,
+    masked_line: str,
+    short_pattern: re.Pattern[str],
+    sequence_pattern: re.Pattern[str] | None,
+    short_symbol: str,
+) -> bool:
+    if sequence_pattern is not None and sequence_pattern.search(masked_line):
+        return True
+    if not short_pattern.search(masked_line):
+        return False
+    short_call = re.search(rf"{re.escape(short_symbol)}\s*\(", masked_line) is not None
+    short_new = re.search(rf"\bnew\s+{re.escape(short_symbol)}\b", masked_line) is not None
+    short_import = _IMPORT_HINT_RE.search(masked_line) is not None
+    short_inheritance = _INHERITANCE_HINT_RE.search(masked_line) is not None
+    return short_call or short_new or short_import or short_inheritance
+
+
+def _is_probable_symbol_declaration(masked_line: str, short_symbol: str) -> bool:
+    if _DECLARATION_HINT_RE.search(masked_line) is None:
+        return False
+    pattern = _SYMBOL_BOUNDARY_TEMPLATE.format(token=re.escape(short_symbol))
+    return re.search(pattern, masked_line) is not None
+
+
+def _classify_reference(masked_line: str, short_symbol: str) -> tuple[str, str]:
+    if _IMPORT_HINT_RE.search(masked_line) is not None:
+        return ("import", "high")
+    if _INHERITANCE_HINT_RE.search(masked_line) is not None:
+        return ("inheritance", "high")
+    if re.search(rf"\bnew\s+{re.escape(short_symbol)}\b", masked_line) is not None:
+        return ("instantiation", "high")
+    if re.search(rf"{re.escape(short_symbol)}\s*\(", masked_line) is not None:
+        return ("call", "medium")
+    return ("read", "low")
+
+
+def _evidence_from_line(line: str) -> str:
+    compact = " ".join(line.strip().split())
+    if not compact:
+        return ""
+    return compact[:160]

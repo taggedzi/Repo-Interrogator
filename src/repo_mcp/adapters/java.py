@@ -5,8 +5,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from repo_mcp.adapters.base import OutlineSymbol, normalize_and_sort_symbols
-from repo_mcp.adapters.lexical import mask_comments_and_strings, scan_brace_blocks
+from repo_mcp.adapters.base import OutlineSymbol, SymbolReference, normalize_and_sort_symbols
+from repo_mcp.adapters.lexical import (
+    mask_comments_and_strings,
+    references_for_symbol_lexical,
+    scan_brace_blocks,
+)
 
 _PACKAGE_RE = re.compile(r"^\s*package\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*;")
 _TYPE_RE = re.compile(
@@ -109,6 +113,21 @@ class JavaLexicalAdapter:
         """Java adapter does not derive symbol hints in v1."""
         _ = prompt
         return ()
+
+    def references_for_symbol(
+        self,
+        symbol: str,
+        files: list[tuple[str, str]],
+        *,
+        top_k: int | None = None,
+    ) -> list[SymbolReference]:
+        """Return deterministic lexical references for one symbol in Java files."""
+        return references_for_symbol_lexical(
+            symbol=symbol,
+            files=files,
+            supports_path=self.supports_path,
+            top_k=top_k,
+        )
 
 
 def _find_package(lines: list[str]) -> str | None:

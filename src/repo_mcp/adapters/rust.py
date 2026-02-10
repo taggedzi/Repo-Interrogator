@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import re
 
-from repo_mcp.adapters.base import OutlineSymbol, normalize_and_sort_symbols
-from repo_mcp.adapters.lexical import mask_comments_and_strings, scan_brace_blocks
+from repo_mcp.adapters.base import OutlineSymbol, SymbolReference, normalize_and_sort_symbols
+from repo_mcp.adapters.lexical import (
+    mask_comments_and_strings,
+    references_for_symbol_lexical,
+    scan_brace_blocks,
+)
 
 _MOD_RE = re.compile(r"^\s*(?:pub\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\b")
 _STRUCT_RE = re.compile(r"^\s*(?:pub\s+)?struct\s+([A-Za-z_][A-Za-z0-9_]*)\b")
@@ -186,6 +190,21 @@ class RustLexicalAdapter:
         """Rust adapter does not derive symbol hints in v1."""
         _ = prompt
         return ()
+
+    def references_for_symbol(
+        self,
+        symbol: str,
+        files: list[tuple[str, str]],
+        *,
+        top_k: int | None = None,
+    ) -> list[SymbolReference]:
+        """Return deterministic lexical references for one symbol in Rust files."""
+        return references_for_symbol_lexical(
+            symbol=symbol,
+            files=files,
+            supports_path=self.supports_path,
+            top_k=top_k,
+        )
 
 
 def _line_depths(masked_text: str) -> list[int]:

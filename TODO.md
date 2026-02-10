@@ -33,11 +33,17 @@ For historical detail, see:
 
 ## Next
 
-- [ ] `V2.5-REF-004` Add lexical cross-file reference fallback for TS/JS/Java/Go/Rust/C++/C#.
-- [ ] `V2.5-REF-005` Add optional `repo.references` tool or equivalent response extension (finalize contract first).
-- [ ] `V2.5-RANK-003` Improve ranking with symbol/usage proximity across files.
-- [ ] `V2.5-OBS-001` Add bundle/ranking audit fields for explainability debugging.
-- [ ] `V2.5-DOC-001` Update `docs/USAGE.md` and `docs/AI_INTEGRATION.md` with v2.5 examples.
+- [x] `V2.5-REF-004` Add lexical cross-file reference fallback for TS/JS/Java/Go/Rust/C++/C# (check `AGENTS.md`, `SPEC.md`, `docs/adr/*.md` first).
+- [ ] `V2.5-REF-005` Add optional `repo.references` tool or equivalent response extension (finalize contract first; check `AGENTS.md`, `SPEC.md`, `docs/adr/*.md` first).
+- [ ] `V2.5-RANK-003` Improve ranking with symbol/usage proximity across files (check `AGENTS.md`, `SPEC.md`, `docs/adr/*.md` first).
+- [ ] `V2.5-OBS-001` Add bundle/ranking audit fields for explainability debugging (check `AGENTS.md`, `SPEC.md`, `docs/adr/*.md` first).
+- [ ] `V2.5-DOC-001` Update `docs/USAGE.md` and `docs/AI_INTEGRATION.md` with v2.5 examples (check `AGENTS.md`, `SPEC.md`, `docs/adr/*.md` first).
+
+### Next Set Execution Checklist
+
+- Before implementing any `Next` item, review `AGENTS.md`, `SPEC.md`, and relevant `docs/adr/*.md`.
+- If tool schemas, determinism guarantees, sandboxing, or dependency posture change, update `SPEC.md` and add/update an ADR before code changes.
+- Keep each implementation scoped to one item ID and run quality gates before marking it done.
 
 ## Later
 
