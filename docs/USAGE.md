@@ -26,6 +26,7 @@ Optional startup overrides:
 - `--max-open-lines`
 - `--max-total-bytes-per-response`
 - `--max-search-hits`
+- `--max-references`
 - `--python-adapter-enabled true|false`
 
 ## Request Shapes
@@ -265,6 +266,45 @@ Hit fields:
 - `score`
 - `matched_terms`
 
+## `repo.references` (v2.5)
+Return deterministic cross-file references for one symbol.
+
+Params:
+- `symbol` (required)
+- `path` (optional file scope)
+- `top_k` (optional, bounded by reference limits)
+
+Request:
+
+```json
+{
+  "id": "req-ref",
+  "method": "repo.references",
+  "params": {
+    "symbol": "Service.run",
+    "top_k": 10
+  }
+}
+```
+
+Result fields:
+- `symbol`
+- `references`:
+  - `symbol`
+  - `path`
+  - `line`
+  - `kind`
+  - `evidence`
+  - `strategy` (`ast` or `lexical`)
+  - `confidence` (`high`, `medium`, `low`)
+- `truncated`
+- `total_candidates`
+
+Notes:
+- Output ordering is deterministic and stable.
+- Python references use AST extraction.
+- TS/JS/Java/Go/Rust/C++/C# use lexical fallback in v2.5.
+
 ## `repo.build_context_bundle`
 Build a deterministic context bundle.
 
@@ -300,6 +340,52 @@ Result fields:
 - `selections`
 - `citations`
 - `audit`
+
+`selections[*].why_selected` includes:
+- `matched_signals`
+- `score_components`
+- `source_query`
+- `matched_terms`
+- `symbol_reference`
+
+`audit.ranking_debug` includes:
+- `candidate_count`
+- `definition_match_count`
+- `reference_proximity_count`
+- `top_candidates` (bounded deterministic list)
+
+Bundle explainability snippet:
+
+```json
+{
+  "selections": [
+    {
+      "path": "src/service.py",
+      "why_selected": {
+        "matched_signals": ["search_score", "matched_terms", "definition_match", "aligned_symbol"],
+        "score_components": {
+          "search_score": 2.5,
+          "definition_match": true,
+          "reference_count_in_range": 0,
+          "min_definition_distance": 1000000000,
+          "path_name_relevance": 1,
+          "range_size_penalty": 4
+        }
+      }
+    }
+  ],
+  "audit": {
+    "ranking_debug": {
+      "candidate_count": 3,
+      "definition_match_count": 1,
+      "reference_proximity_count": 0,
+      "top_candidates": [
+        {"path": "src/service.py", "rank_position": 1, "selected": true}
+      ]
+    }
+  }
+}
+```
 
 Artifacts written to `data_dir`:
 - `last_bundle.json`
@@ -355,6 +441,12 @@ Event fields include:
 
 ```json
 {"id":"w4","method":"repo.outline","params":{"path":"src/repo_mcp/server.py"}}
+```
+
+4a. (Optional v2.5) Resolve cross-file references for a symbol.
+
+```json
+{"id":"w4-ref","method":"repo.references","params":{"symbol":"Service.run","top_k":10}}
 ```
 
 Optional multilingual outline checks:

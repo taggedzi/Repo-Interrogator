@@ -35,6 +35,7 @@ Optional flags:
 - `--max-open-lines`
 - `--max-total-bytes-per-response`
 - `--max-search-hits`
+- `--max-references`
 - `--python-adapter-enabled true|false`
 
 Environment variables:
@@ -54,6 +55,7 @@ So, tool names and argument shapes should be preconfigured in the client using t
 - `repo.open_file`
 - `repo.outline`
 - `repo.search`
+- `repo.references`
 - `repo.build_context_bundle`
 - `repo.refresh_index`
 - `repo.audit_log`
@@ -121,8 +123,9 @@ A practical order:
 3. `repo.search` to locate relevant files/ranges.
 4. `repo.open_file` for exact lines.
 5. `repo.outline` for declaration structure (Python AST + lexical adapters).
-6. `repo.build_context_bundle` when you need compact cited context.
-7. `repo.audit_log` for diagnostics and verification.
+6. `repo.references` for cross-file usage links (`symbol` + optional `path` scope).
+7. `repo.build_context_bundle` when you need compact cited context.
+8. `repo.audit_log` for diagnostics and verification.
 
 When using `repo.outline`, each symbol includes:
 - `kind`, `name`, `signature`, `start_line`, `end_line`, `doc`
@@ -132,6 +135,15 @@ Interpretation notes:
 - Outline output is declaration-based and deterministic.
 - Python includes nested and conditional declarations as syntactic facts.
 - Runtime branch truth is not evaluated.
+
+`repo.references` notes:
+- Returns deterministic declaration-linked references with `strategy` + `confidence`.
+- Python uses `ast`; non-Python uses lexical fallback in v2.5.
+- Use `top_k` to bound payload size and `path` to scope to one file.
+
+`repo.build_context_bundle` v2.5 explainability notes:
+- Each selection includes `why_selected` with signal and score component details.
+- `audit.ranking_debug` includes bounded ranking candidate diagnostics.
 
 ## How to interpret and use results safely
 
@@ -175,6 +187,49 @@ Example `tools/call` request:
       "query": "build_context_bundle",
       "mode": "bm25",
       "top_k": 5
+    }
+  }
+}
+```
+
+Reference lookup example:
+
+```json
+{
+  "id": "ai-3",
+  "method": "tools/call",
+  "params": {
+    "name": "repo.references",
+    "arguments": {
+      "symbol": "Service.run",
+      "top_k": 10
+    }
+  }
+}
+```
+
+Bundle explainability example (result snippet):
+
+```json
+{
+  "selections": [
+    {
+      "path": "src/service.py",
+      "why_selected": {
+        "matched_signals": ["search_score", "matched_terms", "definition_match", "aligned_symbol"],
+        "score_components": {
+          "search_score": 2.5,
+          "definition_match": true,
+          "reference_count_in_range": 0
+        }
+      }
+    }
+  ],
+  "audit": {
+    "ranking_debug": {
+      "candidate_count": 3,
+      "definition_match_count": 1,
+      "reference_proximity_count": 0
     }
   }
 }
