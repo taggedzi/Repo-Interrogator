@@ -24,10 +24,11 @@ Adopt a built-in, opt-in profiling harness centered on `scripts/validate_workflo
 * Add optional JSON profile artifact output for historical comparison.
 * Add optional `cProfile` `.pstats` output for software hotspot analysis.
 * Keep profiling disabled by default and explicitly enabled via CLI flags.
-* Adopt baseline benchmark execution defaults:
-  * self-repo scope only
-  * 3 runs per benchmark invocation
-  * artifacts stored under `<repo_root>/.repo_mcp/perf/`
+* Adopt benchmark execution defaults:
+  * scenario matrix: `self`, `medium`, `large`
+  * 3 runs per scenario per benchmark invocation
+  * artifacts stored under `<repo_root>/.repo_mcp/perf/` in sessioned directories
+  * configurable retention with deterministic pruning of older `session-*` directories
 
 ### Rationale
 
@@ -38,7 +39,7 @@ Adopt a built-in, opt-in profiling harness centered on `scripts/validate_workflo
 ### Consequences
 
 * Profiling runs are slightly more complex to operate due to mode flags and artifacts.
-* Additional documentation and TODO stages are required to operationalize benchmarking and regression gates.
+* Additional documentation and fixture-generation logic are required to operationalize scenario benchmarking and regression gates.
 * Hardware-level counters remain limited to what is safely available from standard library and host OS APIs.
 
 ### Revisit Triggers

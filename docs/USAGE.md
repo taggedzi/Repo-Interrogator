@@ -516,15 +516,28 @@ Capture Python hotspot stats for deeper software profiling:
 .venv/bin/python scripts/validate_workflow.py --repo-root . --profile --cprofile-output /tmp/validate_profile.pstats
 ```
 
-Run repeatable self-repo benchmark profiling (3 runs by default, artifacts in `.repo_mcp/perf/`):
+Run repeatable benchmark profiling (3 runs per scenario by default; scenarios: `self,medium,large`):
 
 ```bash
 .venv/bin/python scripts/benchmark_workflow.py --repo-root .
 ```
 
+Run only specific scenarios:
+
+```bash
+.venv/bin/python scripts/benchmark_workflow.py --repo-root . --scenarios self,medium
+```
+
+Control retention for session artifacts:
+
+```bash
+.venv/bin/python scripts/benchmark_workflow.py --repo-root . --retention-sessions 15
+```
+
 Notes:
 - Profiling is opt-in and disabled by default.
 - Profiling output is diagnostic metadata only; tool output contracts are unchanged.
+- Benchmark outputs are sessioned under `.repo_mcp/perf/session-*/` with a latest summary at `.repo_mcp/perf/benchmark_summary.json`.
 
 ## Language Adapter Limitations
 

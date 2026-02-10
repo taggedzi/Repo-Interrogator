@@ -626,14 +626,22 @@ Baseline profiling contract:
   * optional Python `cProfile` output for software hotspot diagnosis
 * Profiling output must avoid secrets and full file-content dumps.
 
-Baseline benchmark protocol:
+Benchmark protocol:
 
-* Scope: self-repo benchmark workflow (single target `repo_root`) in baseline mode.
-* Default runs per benchmark invocation: 3.
+* Scenarios:
+  * `self`: benchmark the configured `repo_root`.
+  * `medium`: benchmark a deterministic generated medium fixture repository.
+  * `large`: benchmark a deterministic generated large fixture repository.
+* Default scenarios per benchmark invocation: `self,medium,large`.
+* Default runs per scenario: 3.
 * Default benchmark artifact location: `<repo_root>/.repo_mcp/perf/`.
-* Benchmark outputs must include:
+* Benchmark artifacts must be sessioned (for example `session-<timestamp>/...`) and include:
   * per-run profile artifacts
-  * aggregate min/max/mean summaries for total time and per-step timings
+  * per-scenario aggregate min/max/mean summaries for total time and per-step timings
+  * protocol metadata (scenario list, runs per scenario, timeout, fixture profile metadata)
+* Benchmark artifact retention must be deterministic and configurable:
+  * keep newest `N` sessions (default 10),
+  * prune older `session-*` directories.
 
 Non-goals for baseline profiling:
 
