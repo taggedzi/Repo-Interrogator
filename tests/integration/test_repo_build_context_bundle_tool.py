@@ -58,9 +58,18 @@ def test_repo_build_context_bundle_tool_returns_structured_payload(tmp_path: Pat
             "start_line",
             "end_line",
             "excerpt",
+            "why_selected",
             "rationale",
             "score",
             "source_query",
+        }
+        why_selected = first["why_selected"]
+        assert set(why_selected.keys()) == {
+            "matched_signals",
+            "score_components",
+            "source_query",
+            "matched_terms",
+            "symbol_reference",
         }
 
     json_artifact = tmp_path / ".repo_mcp" / "last_bundle.json"

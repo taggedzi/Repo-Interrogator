@@ -57,6 +57,8 @@ def test_bundle_aligns_hit_ranges_to_outline_symbols_when_available() -> None:
     assert selection.path == "src/mod.ts"
     assert selection.start_line == 12
     assert selection.end_line == 16
+    assert selection.why_selected["symbol_reference"] == "Service.build"
+    assert "aligned_symbol" in selection.why_selected["matched_signals"]
     assert "aligned_symbol=Service.build" in selection.rationale
 
 
@@ -100,4 +102,6 @@ def test_bundle_falls_back_to_raw_hit_ranges_when_no_symbols_present() -> None:
     selection = bundle.selections[0]
     assert selection.start_line == 3
     assert selection.end_line == 7
+    assert selection.why_selected["symbol_reference"] is None
+    assert "aligned_symbol" not in selection.why_selected["matched_signals"]
     assert "aligned_symbol=" not in selection.rationale

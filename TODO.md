@@ -9,6 +9,7 @@ For historical detail, see:
 
 - Keep items short (one line each).
 - Keep this file as the primary task tracker (no GitHub issue dependency).
+- Make sure to use `AGENTS.md` for guidance.
 - Put behavior contracts in `SPEC.md`.
 - Put design decisions in `docs/adr/`.
 - Move completed items from `Now`/`Next` to `Done (recent)`.
@@ -27,7 +28,7 @@ For historical detail, see:
 - [x] `V2.5-REF-002` Add ADR for cross-file references scope and non-goals.
 - [x] `V2.5-REF-003` Implement Python reference extraction (definition -> usage links, deterministic ordering).
 - [x] `V2.5-RANK-001` Define deterministic bundle ranking signals and tie-break rules in `SPEC.md`.
-- [ ] `V2.5-RANK-002` Emit `why_selected` explanations for bundle selections.
+- [x] `V2.5-RANK-002` Emit `why_selected` explanations for bundle selections.
 - [ ] `V2.5-TEST-001` Add golden tests for reference output and ranking stability.
 
 ## Next

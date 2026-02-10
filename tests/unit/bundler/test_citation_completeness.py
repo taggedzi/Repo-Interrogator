@@ -41,6 +41,15 @@ def test_bundle_citations_and_rationales_are_complete() -> None:
     assert selection.path == "pkg/core.py"
     assert selection.start_line == 5
     assert selection.end_line == 7
+    assert set(selection.why_selected.keys()) == {
+        "matched_signals",
+        "score_components",
+        "source_query",
+        "matched_terms",
+        "symbol_reference",
+    }
+    assert selection.why_selected["source_query"] == selection.source_query
+    assert selection.why_selected["symbol_reference"] is None
     assert selection.rationale
     assert "matched_terms" in selection.rationale
     assert citation.path == selection.path

@@ -72,3 +72,17 @@ def test_tool_contract_matrix_for_required_v1_tools(tmp_path: Path) -> None:
                 "citations",
                 "audit",
             }
+            selections = response["result"]["selections"]
+            assert isinstance(selections, list)
+            if selections:
+                first = selections[0]
+                assert set(first.keys()) == {
+                    "path",
+                    "start_line",
+                    "end_line",
+                    "excerpt",
+                    "why_selected",
+                    "rationale",
+                    "score",
+                    "source_query",
+                }

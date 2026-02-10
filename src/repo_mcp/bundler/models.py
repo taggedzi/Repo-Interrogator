@@ -21,6 +21,7 @@ class BundleSelection:
     start_line: int
     end_line: int
     excerpt: str
+    why_selected: dict[str, object]
     rationale: str
     score: float
     source_query: str

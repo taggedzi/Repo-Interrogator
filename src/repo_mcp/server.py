@@ -678,6 +678,7 @@ def _bundle_markdown(payload: dict[str, object]) -> str:
             lines.append(f"- path: `{selection.get('path')}`")
             lines.append(f"- range: `{selection.get('start_line')}`-`{selection.get('end_line')}`")
             lines.append(f"- score: `{selection.get('score')}`")
+            lines.append(f"- why_selected: `{selection.get('why_selected')}`")
             lines.append(f"- rationale: {selection.get('rationale')}")
             excerpt = selection.get("excerpt")
             if isinstance(excerpt, str):

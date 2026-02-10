@@ -296,6 +296,7 @@ def _select_with_budget(
 
         lines = read_lines_fn(hit.path, hit.start_line, hit.end_line)
         excerpt = "\n".join(lines)
+        why_selected = _build_why_selected(hit)
         rationale = _build_rationale(hit)
         selected.append(
             BundleSelection(
@@ -303,6 +304,7 @@ def _select_with_budget(
                 start_line=hit.start_line,
                 end_line=hit.end_line,
                 excerpt=excerpt,
+                why_selected=why_selected,
                 rationale=rationale,
                 score=hit.score,
                 source_query=hit.source_query,
@@ -328,6 +330,21 @@ def _build_rationale(hit: _Hit) -> str:
     if hit.aligned_symbol is not None:
         return f"{rationale} aligned_symbol={hit.aligned_symbol}."
     return rationale
+
+
+def _build_why_selected(hit: _Hit) -> dict[str, object]:
+    matched_signals = ["search_score"]
+    if hit.matched_terms:
+        matched_signals.append("matched_terms")
+    if hit.aligned_symbol is not None:
+        matched_signals.append("aligned_symbol")
+    return {
+        "matched_signals": matched_signals,
+        "score_components": {"search_score": hit.score},
+        "source_query": hit.source_query,
+        "matched_terms": list(hit.matched_terms),
+        "symbol_reference": hit.aligned_symbol,
+    }
 
 
 def _bundle_id(

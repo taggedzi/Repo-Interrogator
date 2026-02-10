@@ -81,5 +81,6 @@ def test_bundle_dedupe_and_rank_stability() -> None:
     assert first.audit.dedupe_before > first.audit.dedupe_after
     assert [s.path for s in first.selections] == [s.path for s in second.selections]
     assert [s.start_line for s in first.selections] == [s.start_line for s in second.selections]
+    assert [s.why_selected for s in first.selections] == [s.why_selected for s in second.selections]
     assert first.selections[0].path == "src/a.py"
     assert first.selections[0].score == 2.0

@@ -466,7 +466,7 @@ Outputs:
 
 * `bundle_id`
 * `prompt_fingerprint`
-* selected files + ranges + rationale
+* selected files + ranges + `why_selected` + rationale
 * excerpts
 * citations
 * audit details
@@ -481,7 +481,7 @@ Outputs:
    * prefer symbol-aligned ranges
 5. Open minimal necessary ranges
 6. Enforce budgets strictly
-7. Emit per-excerpt rationale
+7. Emit per-excerpt `why_selected` explanation and rationale
 
 #### Deterministic ranking signals and tie-break rules (v2.5)
 
@@ -515,6 +515,16 @@ Requirements:
 * Missing signal values must be represented deterministically (`reference_count_in_range = 0`, `min_definition_distance = +inf` sentinel, etc.).
 * Ranking and tie-break behavior must be auditable from bundle debug metadata.
 * Given identical repo state and inputs, selected bundle ordering must be identical across repeated runs.
+
+#### `why_selected` payload (v2.5)
+
+Each selected excerpt must include a bounded deterministic `why_selected` object with:
+
+* `matched_signals`: ordered signal labels that contributed to selection
+* `score_components`: deterministic score parts (at minimum `search_score`)
+* `source_query`: query variant that produced the candidate
+* `matched_terms`: normalized matched terms used for retrieval evidence
+* `symbol_reference`: aligned declaration/symbol name when available, else `null`
 
 **Important:**
 No LLM calls.
