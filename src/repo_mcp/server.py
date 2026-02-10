@@ -947,12 +947,12 @@ class StdioServer:
 
     def _bundle_reference_lookup_many(
         self,
-    ) -> Callable[[list[str]], dict[str, list[dict[str, object]]]]:
+    ) -> Callable[[list[str]], dict[str, tuple[tuple[str, int], ...]]]:
         """Build deterministic batch reference lookup closure for bundle ranking."""
         files_cache: list[tuple[str, str]] | None = None
-        symbol_cache: dict[str, list[dict[str, object]]] = {}
+        symbol_cache: dict[str, tuple[tuple[str, int], ...]] = {}
 
-        def lookup(symbols: list[str]) -> dict[str, list[dict[str, object]]]:
+        def lookup(symbols: list[str]) -> dict[str, tuple[tuple[str, int], ...]]:
             nonlocal files_cache
             normalized = sorted({symbol.strip() for symbol in symbols if symbol.strip()})
             if not normalized:
@@ -963,9 +963,10 @@ class StdioServer:
                     files_cache = self._reference_source_files(None)
                 resolved = self._collect_symbol_references_many(missing, files_cache)
                 for symbol in missing:
-                    payload = [asdict(item) for item in resolved.get(symbol, [])]
-                    symbol_cache[symbol] = payload
-            return {symbol: symbol_cache.get(symbol, []) for symbol in normalized}
+                    symbol_cache[symbol] = tuple(
+                        (item.path, item.line) for item in resolved.get(symbol, [])
+                    )
+            return {symbol: symbol_cache.get(symbol, ()) for symbol in normalized}
 
         return lookup
 

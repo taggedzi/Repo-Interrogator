@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import time
+from bisect import bisect_left, bisect_right
 from dataclasses import asdict, dataclass, replace
 from typing import Protocol
 
@@ -56,7 +57,7 @@ class ReferenceLookupFn(Protocol):
 class ReferenceLookupManyFn(Protocol):
     """Batch reference lookup callback for deterministic ranking signals."""
 
-    def __call__(self, symbols: list[str]) -> dict[str, list[dict[str, object]]]:
+    def __call__(self, symbols: list[str]) -> dict[str, list[object] | tuple[tuple[str, int], ...]]:
         """Return declaration-linked reference records grouped by symbol."""
 
 
@@ -262,6 +263,9 @@ class _SymbolRange:
     end_line: int
 
 
+_ReferenceLineIndex = dict[str, tuple[int, ...]]
+
+
 def _dedupe_hits(hits: list[_Hit]) -> list[_Hit]:
     best_by_key: dict[tuple[str, int, int], _Hit] = {}
     for hit in hits:
@@ -286,23 +290,28 @@ def _rank_hits(
     reference_lookup_fn: ReferenceLookupFn | None,
     reference_lookup_many_fn: ReferenceLookupManyFn | None,
 ) -> list[_Hit]:
-    prompt_term_set = set(prompt_terms)
+    prompt_term_set = frozenset(prompt_terms)
     reference_cache = _prefetch_reference_pairs(
         hits=hits,
         reference_lookup_fn=reference_lookup_fn,
         reference_lookup_many_fn=reference_lookup_many_fn,
     )
-    ranked_hits = [
-        replace(
-            hit,
-            ranking=_ranking_signals_for_hit(
+    symbol_token_cache: dict[str, frozenset[str]] = {}
+    path_relevance_cache: dict[str, int] = {}
+    ranked_hits: list[_Hit] = []
+    for hit in hits:
+        ranked_hits.append(
+            replace(
                 hit,
-                prompt_term_set=prompt_term_set,
-                reference_cache=reference_cache,
-            ),
+                ranking=_ranking_signals_for_hit(
+                    hit,
+                    prompt_term_set=prompt_term_set,
+                    reference_cache=reference_cache,
+                    symbol_token_cache=symbol_token_cache,
+                    path_relevance_cache=path_relevance_cache,
+                ),
+            )
         )
-        for hit in hits
-    ]
     return sorted(ranked_hits, key=_rank_sort_key)
 
 
@@ -311,7 +320,7 @@ def _prefetch_reference_pairs(
     hits: list[_Hit],
     reference_lookup_fn: ReferenceLookupFn | None,
     reference_lookup_many_fn: ReferenceLookupManyFn | None,
-) -> dict[str, tuple[tuple[str, int], ...]]:
+) -> dict[str, _ReferenceLineIndex]:
     symbols = sorted(
         {
             hit.aligned_symbol
@@ -323,28 +332,34 @@ def _prefetch_reference_pairs(
         return {}
     if reference_lookup_many_fn is not None:
         grouped = reference_lookup_many_fn(symbols)
-        cache: dict[str, tuple[tuple[str, int], ...]] = {}
+        cache: dict[str, _ReferenceLineIndex] = {}
         for symbol in symbols:
             payload = grouped.get(symbol, [])
-            cache[symbol] = _normalize_reference_pairs(payload)
+            cache[symbol] = _build_reference_line_index(payload)
         return cache
     if reference_lookup_fn is None:
         return {}
-    cache: dict[str, tuple[tuple[str, int], ...]] = {}
+    cache: dict[str, _ReferenceLineIndex] = {}
     for symbol in symbols:
-        cache[symbol] = _normalize_reference_pairs(reference_lookup_fn(symbol))
+        cache[symbol] = _build_reference_line_index(reference_lookup_fn(symbol))
     return cache
 
 
 def _ranking_signals_for_hit(
     hit: _Hit,
     *,
-    prompt_term_set: set[str],
-    reference_cache: dict[str, tuple[tuple[str, int], ...]],
+    prompt_term_set: frozenset[str],
+    reference_cache: dict[str, _ReferenceLineIndex],
+    symbol_token_cache: dict[str, frozenset[str]],
+    path_relevance_cache: dict[str, int],
 ) -> _RankingSignals:
-    aligned_tokens = set()
+    aligned_tokens: frozenset[str] = frozenset()
     if hit.aligned_symbol is not None:
-        aligned_tokens = set(tokenize(hit.aligned_symbol.replace(".", " ")))
+        if hit.aligned_symbol in symbol_token_cache:
+            aligned_tokens = symbol_token_cache[hit.aligned_symbol]
+        else:
+            aligned_tokens = frozenset(tokenize(hit.aligned_symbol.replace(".", " ")))
+            symbol_token_cache[hit.aligned_symbol] = aligned_tokens
     definition_match = bool(prompt_term_set & aligned_tokens)
     reference_count_in_range = 0
     min_definition_distance = 10**9
@@ -358,19 +373,38 @@ def _ranking_signals_for_hit(
             reference_count_in_range = 0
             min_definition_distance = 10**9
 
+    path_name_relevance = path_relevance_cache.get(hit.path)
+    if path_name_relevance is None:
+        path_name_relevance = _path_name_relevance(hit.path, prompt_term_set)
+        path_relevance_cache[hit.path] = path_name_relevance
+
     return _RankingSignals(
         definition_match=definition_match,
         reference_count_in_range=reference_count_in_range,
         min_definition_distance=min_definition_distance,
-        path_name_relevance=_path_name_relevance(hit.path, prompt_term_set),
+        path_name_relevance=path_name_relevance,
         search_score=hit.score,
         range_size_penalty=max(0, hit.end_line - hit.start_line + 1),
     )
 
 
-def _normalize_reference_pairs(records: list[dict[str, object]]) -> tuple[tuple[str, int], ...]:
-    pairs: list[tuple[str, int]] = []
+def _build_reference_line_index(
+    records: list[object] | tuple[tuple[str, int], ...],
+) -> _ReferenceLineIndex:
+    lines_by_path: dict[str, list[int]] = {}
     for item in records:
+        if (
+            isinstance(item, tuple)
+            and len(item) == 2
+            and isinstance(item[0], str)
+            and isinstance(item[1], int)
+        ):
+            path = item[0]
+            line = item[1]
+            if line < 1:
+                continue
+            lines_by_path.setdefault(path, []).append(line)
+            continue
         if not isinstance(item, dict):
             continue
         path = item.get("path")
@@ -381,29 +415,32 @@ def _normalize_reference_pairs(records: list[dict[str, object]]) -> tuple[tuple[
             continue
         if line < 1:
             continue
-        pairs.append((path, line))
-    return tuple(sorted(pairs, key=lambda row: (row[0], row[1])))
+        lines_by_path.setdefault(path, []).append(line)
+    return {
+        path: tuple(sorted(lines))
+        for path, lines in sorted(lines_by_path.items(), key=lambda item: item[0])
+    }
 
 
-def _reference_proximity_for_hit(
-    hit: _Hit, references: tuple[tuple[str, int], ...]
-) -> tuple[int, int]:
-    count = 0
-    min_distance = 10**9
-    for path, line in references:
-        if path != hit.path:
-            continue
-        if hit.start_line <= line <= hit.end_line:
-            count += 1
-            min_distance = 0
-            continue
-        distance = min(abs(line - hit.start_line), abs(line - hit.end_line))
-        if distance < min_distance:
-            min_distance = distance
-    return count, min_distance
+def _reference_proximity_for_hit(hit: _Hit, references: _ReferenceLineIndex) -> tuple[int, int]:
+    lines = references.get(hit.path, ())
+    if not lines:
+        return 0, 10**9
+    left = bisect_left(lines, hit.start_line)
+    right = bisect_right(lines, hit.end_line)
+    count = right - left
+    if count > 0:
+        return count, 0
+    before_distance = 10**9
+    after_distance = 10**9
+    if left > 0:
+        before_distance = hit.start_line - lines[left - 1]
+    if left < len(lines):
+        after_distance = lines[left] - hit.end_line
+    return 0, min(before_distance, after_distance)
 
 
-def _path_name_relevance(path: str, prompt_terms: set[str]) -> int:
+def _path_name_relevance(path: str, prompt_terms: frozenset[str]) -> int:
     if not prompt_terms:
         return 0
     path_terms = set(tokenize(path.replace("/", " ").replace(".", " ")))
@@ -411,14 +448,9 @@ def _path_name_relevance(path: str, prompt_terms: set[str]) -> int:
 
 
 def _rank_sort_key(hit: _Hit) -> tuple[object, ...]:
-    ranking = hit.ranking or _RankingSignals(
-        definition_match=False,
-        reference_count_in_range=0,
-        min_definition_distance=10**9,
-        path_name_relevance=0,
-        search_score=hit.score,
-        range_size_penalty=max(0, hit.end_line - hit.start_line + 1),
-    )
+    ranking = hit.ranking
+    if ranking is None:
+        raise ValueError("rank_sort_key requires ranking signals")
     return (
         -int(ranking.definition_match),
         -ranking.reference_count_in_range,
@@ -448,14 +480,9 @@ def _build_ranking_debug_candidates(
     }
     entries: list[BundleRankingDebugCandidate] = []
     for idx, hit in enumerate(ranked[:20], start=1):
-        ranking = hit.ranking or _RankingSignals(
-            definition_match=False,
-            reference_count_in_range=0,
-            min_definition_distance=10**9,
-            path_name_relevance=0,
-            search_score=hit.score,
-            range_size_penalty=max(0, hit.end_line - hit.start_line + 1),
-        )
+        ranking = hit.ranking
+        if ranking is None:
+            raise ValueError("ranking debug candidates require ranking signals")
         key = (hit.path, hit.start_line, hit.end_line, hit.source_query)
         entries.append(
             BundleRankingDebugCandidate(
