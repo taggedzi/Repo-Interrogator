@@ -729,9 +729,8 @@ class WorkflowValidator:
         selection_debug = audit.get("selection_debug") if isinstance(audit, dict) else None
         self._assert_true(
             "bundle.selection_debug_shape",
-            isinstance(selection_debug, dict) and {"why_not_selected_summary"}.issubset(
-                set(selection_debug.keys())
-            ),
+            isinstance(selection_debug, dict)
+            and {"why_not_selected_summary"}.issubset(set(selection_debug.keys())),
             "Bundle audit should include selection_debug explainability fields.",
             expected="selection_debug has why_not_selected_summary",
             actual=f"selection_debug={type(selection_debug).__name__}",
@@ -1007,8 +1006,7 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=20,
         help=(
-            "Number of top cumulative functions to print for server cProfile summary. "
-            "Default: 20."
+            "Number of top cumulative functions to print for server cProfile summary. Default: 20."
         ),
     )
     return parser.parse_args()

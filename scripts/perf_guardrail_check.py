@@ -126,10 +126,7 @@ def main() -> int:
     latest_summary = repo_root / ".repo_mcp" / "perf" / "benchmark_summary.json"
     if not latest_summary.exists():
         print(
-            (
-                "Benchmark completed but latest summary was not found at "
-                f"{latest_summary}."
-            ),
+            (f"Benchmark completed but latest summary was not found at {latest_summary}."),
             file=sys.stderr,
         )
         return 3

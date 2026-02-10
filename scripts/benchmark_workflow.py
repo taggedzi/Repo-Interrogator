@@ -166,8 +166,7 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=20.0,
         help=(
-            "Percent increase threshold for drift warnings versus baseline means. "
-            "Default: 20.0."
+            "Percent increase threshold for drift warnings versus baseline means. Default: 20.0."
         ),
     )
     return parser.parse_args()

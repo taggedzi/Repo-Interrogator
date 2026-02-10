@@ -182,9 +182,7 @@ def test_scenario_mean_metrics_extracts_expected_keys() -> None:
             "repo.refresh_index": {"mean_seconds": 1.2},
             "repo.build_context_bundle": {"mean_seconds": 1.3},
         },
-        "references_profile_metrics": {
-            "candidate_discovery_seconds_mean": {"mean_seconds": 0.4}
-        },
+        "references_profile_metrics": {"candidate_discovery_seconds_mean": {"mean_seconds": 0.4}},
         "bundler_profile_metrics": {"ranking_seconds_mean": {"mean_seconds": 0.2}},
     }
     metrics = module.scenario_mean_metrics(summary)
