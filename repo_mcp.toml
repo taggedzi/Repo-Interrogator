@@ -1,0 +1,81 @@
+# Example repository-level configuration for Repo Interrogator.
+# Copy this file to <repo_root>/repo_mcp.toml and adjust as needed.
+#
+# Hard caps:
+# max_file_bytes <= 4194304
+# max_open_lines <= 2000
+# max_total_bytes_per_response <= 1048576
+# max_search_hits <= 200
+# max_references <= 200
+#
+# Security note:
+# Denylist relaxation is not supported in v1.
+
+[limits]
+max_file_bytes = 1048576
+max_open_lines = 500
+max_total_bytes_per_response = 262144
+max_search_hits = 50
+max_references = 50
+
+[index]
+# Default v2.5 indexed source + docs/config extensions.
+include_extensions = [
+  ".py",
+  ".js", ".jsx",
+  ".ts", ".tsx",
+  ".java",
+  ".go",
+  ".rs",
+  ".c", ".h", ".cc", ".hh", ".cpp", ".hpp", ".cxx",
+  ".cs",
+  ".md", ".rst", ".toml", ".yaml", ".yml", ".json", ".ini", ".cfg"
+]
+
+# Default deterministic noise exclusions.
+# These are usually cache/tool/build artifacts, not project source-of-truth.
+exclude_globs = [
+  "**/.git/**",
+  "**/.github/**",
+  "**/.venv/**",
+  "**/__pycache__/**",
+  "**/.repo_mcp/**",
+  "**/.mypy_cache/**",
+  "**/.pytest_cache/**",
+  "**/.ruff_cache/**",
+  "**/.tox/**",
+  "**/.nox/**",
+  "**/.cache/**",
+  "**/node_modules/**",
+  "**/.pnpm-store/**",
+  "**/.yarn/**",
+  "**/.npm/**",
+  "**/.next/**",
+  "**/.nuxt/**",
+  "**/.svelte-kit/**",
+  "**/.gradle/**",
+  "**/.idea/**",
+  "**/.vscode/**",
+  "**/dist/**",
+  "**/build/**",
+  "**/target/**",
+  "**/bin/**",
+  "**/obj/**",
+  "**/out/**",
+  "**/coverage/**",
+  "**/tmp/**",
+  "**/temp/**"
+]
+
+[adapters]
+python_enabled = true
+
+# Stack-specific notes:
+# - Python repos often also exclude: "**/.hypothesis/**", "**/.ipynb_checkpoints/**"
+# - Node repos often also exclude: "**/.turbo/**", "**/.parcel-cache/**"
+# - Rust repos often also exclude: "**/.cargo/**"
+# - Java/Gradle repos often also exclude: "**/.gradle/**", "**/.idea/**"
+# - .NET repos often also exclude: "**/TestResults/**", "**/*.user", "**/*.suo"
+#
+# If your repository intentionally stores source-of-truth files in one of these paths,
+# remove that glob from exclude_globs.
