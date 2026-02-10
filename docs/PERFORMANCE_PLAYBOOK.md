@@ -33,6 +33,27 @@ Scope:
 .venv/bin/python scripts/benchmark_workflow.py --repo-root . --regression-baseline .repo_mcp/perf/benchmark_summary.json --regression-threshold-percent 20
 ```
 
+Baseline usage pattern (recommended):
+
+1. Capture and retain a baseline snapshot:
+
+```bash
+mkdir -p .repo_mcp/perf/baselines
+cp .repo_mcp/perf/benchmark_summary.json .repo_mcp/perf/baselines/local-self.json
+```
+
+2. Run warning-only drift checks against that fixed baseline:
+
+```bash
+.venv/bin/python scripts/benchmark_workflow.py --repo-root . --scenarios self --runs 1 --regression-baseline .repo_mcp/perf/baselines/local-self.json --regression-threshold-percent 20
+```
+
+3. Optional helper wrapper (bootstraps baseline if missing):
+
+```bash
+.venv/bin/python scripts/perf_guardrail_check.py --repo-root . --baseline .repo_mcp/perf/baselines/local-self.json --bootstrap-if-missing
+```
+
 5. If software hotspots are unclear, capture workflow `cProfile`:
 
 ```bash
@@ -50,6 +71,7 @@ Protocol rules:
 - Compare sessions generated on the same machine state when possible.
 - Preserve artifacts for before/after comparisons; avoid deleting session history during diagnosis.
 - Treat guardrail warnings as triage input; they are intentionally non-blocking.
+- Prefer checking against a fixed retained baseline, not the mutable "latest summary" path.
 
 ## 2) Artifact Map
 

@@ -45,8 +45,8 @@ For historical detail, see:
 
 ## Next
 
-- [ ] `USE-PERF-001` Add baseline perf check command docs and usage pattern (warning-only drift checks) to `docs/PERFORMANCE_PLAYBOOK.md`.
-- [ ] `USE-CI-001` Add optional non-blocking CI/local check wiring for perf drift using existing benchmark guardrails.
+- [x] `USE-PERF-001` Add baseline perf check command docs and usage pattern (warning-only drift checks) to `docs/PERFORMANCE_PLAYBOOK.md`.
+- [x] `USE-CI-001` Add optional non-blocking CI/local check wiring for perf drift using existing benchmark guardrails.
 - [ ] `USE-DOC-002` Add 2-3 end-to-end “LLM workflow recipes” in `docs/USAGE.md` and `docs/AI_INTEGRATION.md`:
   - bug investigation,
   - refactor impact analysis,
