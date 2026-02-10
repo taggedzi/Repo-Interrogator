@@ -552,6 +552,7 @@ Notes:
 - Benchmark outputs are sessioned under `.repo_mcp/perf/session-*/` with a latest summary at `.repo_mcp/perf/benchmark_summary.json`.
 - With `--profile-references`, per-run `repo.references` timing artifacts are written as `references_run_*.jsonl` inside each scenario session directory.
 - With `--profile-bundler`, per-run bundler timing artifacts are written as `bundler_run_*.jsonl` inside each scenario session directory.
+- For bottleneck diagnosis workflow and interpretation guidance, see `docs/PERFORMANCE_PLAYBOOK.md`.
 
 ## Language Adapter Limitations
 

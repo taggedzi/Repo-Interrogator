@@ -118,3 +118,18 @@ Example valid line:
 ```json
 {"id":"x1","method":"repo.status","params":{}}
 ```
+
+## 11) Performance is slower than expected
+
+Symptom:
+- workflow validation or benchmark runs are consistently slow
+- repeated runs show large timing variance
+
+What to do:
+1. run baseline benchmark:
+   - `.venv/bin/python scripts/benchmark_workflow.py --repo-root .`
+2. run targeted modes:
+   - `.venv/bin/python scripts/benchmark_workflow.py --repo-root . --profile-references`
+   - `.venv/bin/python scripts/benchmark_workflow.py --repo-root . --profile-bundler`
+3. inspect artifacts under `.repo_mcp/perf/session-*/`
+4. use `docs/PERFORMANCE_PLAYBOOK.md` to classify hardware vs software bottlenecks and map timings to likely code paths

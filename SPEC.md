@@ -624,6 +624,7 @@ Baseline profiling contract:
   * bounded environment snapshot (platform, Python version, CPU count, load average when available, process max RSS)
   * optional JSON artifact output for offline comparison
   * optional Python `cProfile` output for software hotspot diagnosis
+* A maintained profiling playbook must document diagnostic workflow and hardware-vs-software bottleneck triage (`docs/PERFORMANCE_PLAYBOOK.md`).
 * Profiling output must avoid secrets and full file-content dumps.
 
 Benchmark protocol:
