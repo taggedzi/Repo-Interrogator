@@ -1,0 +1,94 @@
+{
+  "audit": {
+    "budget_enforcement": [
+      "skipped_file_budget:src/utils.py:3-8"
+    ],
+    "dedupe_counts": {
+      "after": 3,
+      "before": 5
+    },
+    "search_queries": [
+      "service run parser",
+      "service",
+      "run",
+      "parser"
+    ]
+  },
+  "budget": {
+    "max_files": 2,
+    "max_total_lines": 16
+  },
+  "bundle_id": "b860efd24d945b52959bdfaa3ff0224048ed42184888dd0048a0cb048b459700",
+  "citations": [
+    {
+      "end_line": 7,
+      "path": "src/service.py",
+      "selection_index": 0,
+      "start_line": 4
+    },
+    {
+      "end_line": 18,
+      "path": "src/app.py",
+      "selection_index": 1,
+      "start_line": 11
+    }
+  ],
+  "prompt_fingerprint": "893d18ab6d929b3703bc4184d82d3bb00267ece8b38af5c0c66ea2a27e5e069c",
+  "selections": [
+    {
+      "end_line": 7,
+      "excerpt": "src/service.py:4\nsrc/service.py:5\nsrc/service.py:6\nsrc/service.py:7",
+      "path": "src/service.py",
+      "rationale": "Selected from query 'service run parser' with score 2.500000; matched_terms=run, service. aligned_symbol=Service.run.",
+      "score": 2.5,
+      "source_query": "service run parser",
+      "start_line": 4,
+      "why_selected": {
+        "matched_signals": [
+          "search_score",
+          "matched_terms",
+          "aligned_symbol"
+        ],
+        "matched_terms": [
+          "run",
+          "service"
+        ],
+        "score_components": {
+          "search_score": 2.5
+        },
+        "source_query": "service run parser",
+        "symbol_reference": "Service.run"
+      }
+    },
+    {
+      "end_line": 18,
+      "excerpt": "src/app.py:11\nsrc/app.py:12\nsrc/app.py:13\nsrc/app.py:14\nsrc/app.py:15\nsrc/app.py:16\nsrc/app.py:17\nsrc/app.py:18",
+      "path": "src/app.py",
+      "rationale": "Selected from query 'service run parser' with score 1.600000; matched_terms=parser. aligned_symbol=use_service.",
+      "score": 1.6,
+      "source_query": "service run parser",
+      "start_line": 11,
+      "why_selected": {
+        "matched_signals": [
+          "search_score",
+          "matched_terms",
+          "aligned_symbol"
+        ],
+        "matched_terms": [
+          "parser"
+        ],
+        "score_components": {
+          "search_score": 1.6
+        },
+        "source_query": "service run parser",
+        "symbol_reference": "use_service"
+      }
+    }
+  ],
+  "strategy": "hybrid",
+  "totals": {
+    "selected_files": 2,
+    "selected_lines": 12,
+    "truncated": true
+  }
+}

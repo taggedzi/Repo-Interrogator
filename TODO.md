@@ -29,7 +29,7 @@ For historical detail, see:
 - [x] `V2.5-REF-003` Implement Python reference extraction (definition -> usage links, deterministic ordering).
 - [x] `V2.5-RANK-001` Define deterministic bundle ranking signals and tie-break rules in `SPEC.md`.
 - [x] `V2.5-RANK-002` Emit `why_selected` explanations for bundle selections.
-- [ ] `V2.5-TEST-001` Add golden tests for reference output and ranking stability.
+- [x] `V2.5-TEST-001` Add golden tests for reference output and ranking stability.
 
 ## Next
 

@@ -1,0 +1,23 @@
+{
+  "references": [
+    {
+      "confidence": "medium",
+      "evidence": "svc.run()",
+      "kind": "call",
+      "line": 6,
+      "path": "src/a.py",
+      "strategy": "ast",
+      "symbol": "Service.run"
+    },
+    {
+      "confidence": "medium",
+      "evidence": "svc.run()",
+      "kind": "call",
+      "line": 6,
+      "path": "src\\b.py",
+      "strategy": "ast",
+      "symbol": "Service.run"
+    }
+  ],
+  "symbol": "Service.run"
+}
