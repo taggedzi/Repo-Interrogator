@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import time
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from repo_mcp.config import IndexConfig
@@ -12,27 +14,111 @@ from repo_mcp.index.models import FileRecord, IndexDelta
 _BINARY_SNIFF_BYTES = 4096
 
 
-def discover_files(repo_root: Path, config: IndexConfig) -> list[FileRecord]:
+@dataclass(slots=True, frozen=True)
+class DiscoveryProfile:
+    """Deterministic diagnostics for one discovery pass."""
+
+    total_candidates: int
+    excluded_by_glob: int
+    excluded_by_extension: int
+    unchanged_reused: int
+    binary_excluded: int
+    hashed_files: int
+    stat_seconds: float
+    binary_sniff_seconds: float
+    hash_seconds: float
+    total_seconds: float
+
+
+def discover_files(
+    repo_root: Path,
+    config: IndexConfig,
+    previous_records: dict[str, FileRecord] | None = None,
+    profile: dict[str, object] | None = None,
+) -> list[FileRecord]:
     """Discover indexable text files with deterministic ordering."""
+    started = time.perf_counter()
     root = repo_root.resolve()
-    relative_paths: list[str] = []
+    candidates: list[tuple[str, Path]] = []
+    total_candidates = 0
+    excluded_by_glob = 0
+    excluded_by_extension = 0
+    stat_seconds = 0.0
+    binary_sniff_seconds = 0.0
+    hash_seconds = 0.0
+    reused = 0
+    binary_excluded = 0
+    hashed_files = 0
+
     for candidate in root.rglob("*"):
         if not candidate.is_file():
             continue
+        total_candidates += 1
         relative = candidate.relative_to(root).as_posix()
         if should_exclude(relative, config.exclude_globs):
+            excluded_by_glob += 1
             continue
         if not has_allowed_extension(relative, config.include_extensions):
+            excluded_by_extension += 1
             continue
-        relative_paths.append(relative)
+        candidates.append((relative, candidate))
 
-    relative_paths.sort()
+    candidates.sort(key=lambda item: item[0])
     records: list[FileRecord] = []
-    for rel in relative_paths:
-        full_path = root / rel
-        if is_binary_file(full_path):
+    prior = previous_records or {}
+    for rel, full_path in candidates:
+        stat_started = time.perf_counter()
+        stat = full_path.stat()
+        stat_seconds += time.perf_counter() - stat_started
+        previous = prior.get(rel)
+        if (
+            previous is not None
+            and previous.size == stat.st_size
+            and previous.mtime_ns == stat.st_mtime_ns
+        ):
+            records.append(
+                FileRecord(
+                    path=rel,
+                    size=stat.st_size,
+                    mtime_ns=stat.st_mtime_ns,
+                    content_hash=previous.content_hash,
+                )
+            )
+            reused += 1
             continue
-        records.append(build_file_record(root, full_path))
+        sniff_started = time.perf_counter()
+        if is_binary_file(full_path):
+            binary_sniff_seconds += time.perf_counter() - sniff_started
+            binary_excluded += 1
+            continue
+        binary_sniff_seconds += time.perf_counter() - sniff_started
+        hash_started = time.perf_counter()
+        content_hash = sha256_file(full_path)
+        hash_seconds += time.perf_counter() - hash_started
+        hashed_files += 1
+        records.append(
+            FileRecord(
+                path=rel,
+                size=stat.st_size,
+                mtime_ns=stat.st_mtime_ns,
+                content_hash=content_hash,
+            )
+        )
+
+    if profile is not None:
+        payload = DiscoveryProfile(
+            total_candidates=total_candidates,
+            excluded_by_glob=excluded_by_glob,
+            excluded_by_extension=excluded_by_extension,
+            unchanged_reused=reused,
+            binary_excluded=binary_excluded,
+            hashed_files=hashed_files,
+            stat_seconds=stat_seconds,
+            binary_sniff_seconds=binary_sniff_seconds,
+            hash_seconds=hash_seconds,
+            total_seconds=time.perf_counter() - started,
+        )
+        profile.update(asdict(payload))
     return records
 
 

@@ -79,16 +79,26 @@ class IndexManager:
     def refresh(self, force: bool = False) -> dict[str, object]:
         """Refresh index with incremental behavior by default."""
         start = time.perf_counter()
-        current_records = self._filter_internal_records(
-            discover_files(self._repo_root, self._index_config)
-        )
-
+        discovery_profile: dict[str, object] = {}
+        load_previous_started = time.perf_counter()
         previous_records: dict[str, FileRecord] = {}
         if self._manifest_path.exists():
             if force:
                 previous_records = self._load_file_records(allow_schema_mismatch=True)
             else:
                 previous_records = self._load_file_records(allow_schema_mismatch=False)
+        load_previous_seconds = time.perf_counter() - load_previous_started
+
+        discover_started = time.perf_counter()
+        current_records = self._filter_internal_records(
+            discover_files(
+                self._repo_root,
+                self._index_config,
+                previous_records=previous_records,
+                profile=discovery_profile,
+            )
+        )
+        discover_seconds = time.perf_counter() - discover_started
 
         if force:
             previous_paths = sorted(previous_records.keys())
@@ -104,7 +114,9 @@ class IndexManager:
             updated = delta.updated
             removed = delta.removed
 
+        chunk_started = time.perf_counter()
         chunks = self._build_chunks(current_records)
+        chunk_seconds = time.perf_counter() - chunk_started
         timestamp = _utc_now_iso()
         manifest = {
             "schema_version": INDEX_SCHEMA_VERSION,
@@ -112,15 +124,25 @@ class IndexManager:
             "indexed_file_count": len(current_records),
             "indexed_chunk_count": len(chunks),
         }
+        write_started = time.perf_counter()
         self._write_all(manifest, current_records, chunks)
+        write_seconds = time.perf_counter() - write_started
         duration_ms = int((time.perf_counter() - start) * 1000)
-        return {
+        result: dict[str, object] = {
             "added": len(added),
             "updated": len(updated),
             "removed": len(removed),
             "duration_ms": duration_ms,
             "timestamp": timestamp,
         }
+        result["refresh_profile"] = {
+            "load_previous_seconds": load_previous_seconds,
+            "discover_seconds": discover_seconds,
+            "chunk_seconds": chunk_seconds,
+            "write_seconds": write_seconds,
+            "discovery": discovery_profile,
+        }
+        return result
 
     def search(
         self,
