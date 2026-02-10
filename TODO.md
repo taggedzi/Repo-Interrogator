@@ -41,7 +41,7 @@ For historical detail, see:
 - [x] `USE-ADR-001` Add ADR for bounded retrieval explainability extensions (`why_not_selected`) and non-goals.
 - [x] `USE-QA-001` Add quality golden fixtures for difficult prompts to validate context relevance stability (not just schema/order).
 - [x] `USE-OBS-001` Implement bounded deterministic `why_not_selected` summary for top skipped bundle candidates.
-- [ ] `USE-DOC-001` Add recommended setup presets and tuning guidance to `docs/CONFIG.md` and `examples/repo_mcp.toml`.
+- [x] `USE-DOC-001` Add recommended setup presets and tuning guidance to `docs/CONFIG.md` and `examples/repo_mcp.toml`.
 
 ## Next
 

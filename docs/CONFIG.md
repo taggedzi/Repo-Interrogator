@@ -91,6 +91,41 @@ Recommended approach:
 
 These presets are starting points. Adjust for your repository layout.
 
+Operator presets (non-binding guidance from `SPEC.md`):
+
+`small` (fast local loop, lower recall):
+
+```toml
+[limits]
+max_open_lines = 300
+max_search_hits = 30
+max_references = 30
+```
+
+`medium` (balanced default for most repos):
+
+```toml
+[limits]
+max_open_lines = 500
+max_search_hits = 50
+max_references = 50
+```
+
+`large` (higher recall, higher latency tolerance):
+
+```toml
+[limits]
+max_open_lines = 800
+max_search_hits = 100
+max_references = 100
+```
+
+Preset usage note:
+
+- These names are documentation guidance only in v2.6.
+- There is no runtime `preset` key.
+- Apply preset values by setting concrete `[limits]` values in `repo_mcp.toml`.
+
 Python-focused repository:
 
 ```toml
@@ -114,6 +149,37 @@ Polyglot monorepo (Python + JS/TS + JVM + Rust/.NET/C-family):
 include_extensions = [".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".go", ".rs", ".c", ".h", ".cc", ".hh", ".cpp", ".hpp", ".cxx", ".cs", ".md", ".rst", ".toml", ".yaml", ".yml", ".json", ".ini", ".cfg"]
 exclude_globs = ["**/.git/**", "**/.github/**", "**/.venv/**", "**/__pycache__/**", "**/.repo_mcp/**", "**/.mypy_cache/**", "**/.pytest_cache/**", "**/.ruff_cache/**", "**/.tox/**", "**/.nox/**", "**/.cache/**", "**/node_modules/**", "**/.pnpm-store/**", "**/.yarn/**", "**/.npm/**", "**/.next/**", "**/.nuxt/**", "**/.svelte-kit/**", "**/.gradle/**", "**/.idea/**", "**/.vscode/**", "**/dist/**", "**/build/**", "**/target/**", "**/bin/**", "**/obj/**", "**/out/**", "**/coverage/**", "**/tmp/**", "**/temp/**"]
 ```
+
+## Tuning Guidance
+
+Use this order when tuning:
+
+1. Keep deterministic noise excludes in place.
+2. Pick `small` / `medium` / `large` limits based on latency budget.
+3. Only then widen `include_extensions` or relax excludes for source-of-truth paths.
+
+Symptom-driven adjustments:
+
+- Slow index refresh on small repos:
+  - Confirm cache/build folders are excluded (`.venv`, `.repo_mcp`, `node_modules`, `dist`, `build`, `target`).
+  - Avoid adding broad temp/output globs back into indexing.
+- Slow bundle generation:
+  - Lower `max_search_hits` first.
+  - Then lower `max_references`.
+  - Then lower `max_open_lines` if needed.
+- Missing relevant context:
+  - Raise `max_search_hits` first.
+  - Then raise `max_references`.
+  - Add missing source extensions to `index.include_extensions`.
+- Missing references for valid symbols:
+  - Confirm the symbol's language extension is in `include_extensions`.
+  - Confirm the file is not filtered out by `exclude_globs`.
+
+Safety and determinism reminders:
+
+- Prefer explicit, narrow globs over broad wildcard relaxations.
+- Keep `exclude_globs` stable across environments for reproducible results.
+- Do not use exclude overrides to bypass denylist/security policy.
 
 ## CLI Overrides
 
