@@ -105,6 +105,12 @@ def _to_payload(bundle: BundleResult) -> dict[str, object]:
                 "after": bundle.audit.dedupe_after,
             },
             "budget_enforcement": list(bundle.audit.budget_enforcement),
+            "ranking_debug": {
+                "candidate_count": bundle.audit.ranking_candidate_count,
+                "definition_match_count": bundle.audit.ranking_definition_match_count,
+                "reference_proximity_count": bundle.audit.ranking_reference_proximity_count,
+                "top_candidates": [asdict(item) for item in bundle.audit.ranking_top_candidates],
+            },
         },
     }
 

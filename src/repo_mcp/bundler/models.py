@@ -47,6 +47,24 @@ class BundleTotals:
 
 
 @dataclass(slots=True, frozen=True)
+class BundleRankingDebugCandidate:
+    """Bounded deterministic ranking debug entry for one candidate hit."""
+
+    path: str
+    start_line: int
+    end_line: int
+    source_query: str
+    selected: bool
+    rank_position: int
+    definition_match: bool
+    reference_count_in_range: int
+    min_definition_distance: int
+    path_name_relevance: int
+    search_score: float
+    range_size_penalty: int
+
+
+@dataclass(slots=True, frozen=True)
 class BundleAudit:
     """Deterministic audit details for bundling decisions."""
 
@@ -54,6 +72,10 @@ class BundleAudit:
     dedupe_before: int
     dedupe_after: int
     budget_enforcement: tuple[str, ...]
+    ranking_candidate_count: int
+    ranking_definition_match_count: int
+    ranking_reference_proximity_count: int
+    ranking_top_candidates: tuple[BundleRankingDebugCandidate, ...]
 
 
 @dataclass(slots=True, frozen=True)

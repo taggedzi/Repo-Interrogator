@@ -10,6 +10,7 @@ from repo_mcp.bundler.models import (
     BundleAudit,
     BundleBudget,
     BundleCitation,
+    BundleRankingDebugCandidate,
     BundleResult,
     BundleSelection,
     BundleTotals,
@@ -110,6 +111,16 @@ def build_context_bundle(
         dedupe_before=len(raw_hits),
         dedupe_after=len(deduped),
         budget_enforcement=tuple(budget_notes),
+        ranking_candidate_count=len(ranked),
+        ranking_definition_match_count=sum(
+            1 for hit in ranked if hit.ranking is not None and hit.ranking.definition_match
+        ),
+        ranking_reference_proximity_count=sum(
+            1
+            for hit in ranked
+            if hit.ranking is not None and hit.ranking.reference_count_in_range > 0
+        ),
+        ranking_top_candidates=_build_ranking_debug_candidates(ranked, selections),
     )
     bundle_id = _bundle_id(prompt_fingerprint, selections, totals)
     return BundleResult(
@@ -343,6 +354,44 @@ def _rank_sort_key(hit: _Hit) -> tuple[object, ...]:
 
 def _candidate_id(hit: _Hit) -> str:
     return f"{hit.path}:{hit.start_line}:{hit.end_line}:{hit.source_query}"
+
+
+def _build_ranking_debug_candidates(
+    ranked: list[_Hit],
+    selections: tuple[BundleSelection, ...],
+) -> tuple[BundleRankingDebugCandidate, ...]:
+    selected_keys = {
+        (selection.path, selection.start_line, selection.end_line, selection.source_query)
+        for selection in selections
+    }
+    entries: list[BundleRankingDebugCandidate] = []
+    for idx, hit in enumerate(ranked[:20], start=1):
+        ranking = hit.ranking or _RankingSignals(
+            definition_match=False,
+            reference_count_in_range=0,
+            min_definition_distance=10**9,
+            path_name_relevance=0,
+            search_score=hit.score,
+            range_size_penalty=max(0, hit.end_line - hit.start_line + 1),
+        )
+        key = (hit.path, hit.start_line, hit.end_line, hit.source_query)
+        entries.append(
+            BundleRankingDebugCandidate(
+                path=hit.path,
+                start_line=hit.start_line,
+                end_line=hit.end_line,
+                source_query=hit.source_query,
+                selected=key in selected_keys,
+                rank_position=idx,
+                definition_match=ranking.definition_match,
+                reference_count_in_range=ranking.reference_count_in_range,
+                min_definition_distance=ranking.min_definition_distance,
+                path_name_relevance=ranking.path_name_relevance,
+                search_score=ranking.search_score,
+                range_size_penalty=ranking.range_size_penalty,
+            )
+        )
+    return tuple(entries)
 
 
 def _align_hit_to_symbol_ranges(

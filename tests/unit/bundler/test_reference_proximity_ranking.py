@@ -69,3 +69,6 @@ def test_bundle_ranking_uses_reference_proximity_across_files() -> None:
     score_components = first.why_selected["score_components"]
     assert score_components["reference_count_in_range"] == 1
     assert score_components["min_definition_distance"] == 0
+    assert bundle.audit.ranking_candidate_count == 2
+    assert bundle.audit.ranking_reference_proximity_count == 1
+    assert bundle.audit.ranking_top_candidates[0].selected is True

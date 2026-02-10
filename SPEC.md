@@ -469,7 +469,7 @@ Outputs:
 * selected files + ranges + `why_selected` + rationale
 * excerpts
 * citations
-* audit details
+* audit details (including bounded ranking debug fields)
 
 #### Deterministic bundling algorithm
 
@@ -515,6 +515,19 @@ Requirements:
 * Missing signal values must be represented deterministically (`reference_count_in_range = 0`, `min_definition_distance = +inf` sentinel, etc.).
 * Ranking and tie-break behavior must be auditable from bundle debug metadata.
 * Given identical repo state and inputs, selected bundle ordering must be identical across repeated runs.
+
+#### Bundle ranking debug audit fields (v2.5)
+
+Bundle `audit` payload must include bounded deterministic ranking debug metadata:
+
+* `ranking_debug.candidate_count`
+* `ranking_debug.definition_match_count`
+* `ranking_debug.reference_proximity_count`
+* `ranking_debug.top_candidates` (bounded list, deterministic order) with:
+  * `path`, `start_line`, `end_line`, `source_query`
+  * `selected`, `rank_position`
+  * `definition_match`, `reference_count_in_range`, `min_definition_distance`
+  * `path_name_relevance`, `search_score`, `range_size_penalty`
 
 #### `why_selected` payload (v2.5)
 

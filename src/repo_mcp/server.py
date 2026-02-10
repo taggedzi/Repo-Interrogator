@@ -782,6 +782,12 @@ def _bundle_result_to_dict(result: BundleResult) -> dict[str, object]:
                 "after": result.audit.dedupe_after,
             },
             "budget_enforcement": list(result.audit.budget_enforcement),
+            "ranking_debug": {
+                "candidate_count": result.audit.ranking_candidate_count,
+                "definition_match_count": result.audit.ranking_definition_match_count,
+                "reference_proximity_count": result.audit.ranking_reference_proximity_count,
+                "top_candidates": [asdict(item) for item in result.audit.ranking_top_candidates],
+            },
         },
     }
 

@@ -51,6 +51,20 @@ def test_repo_build_context_bundle_tool_returns_structured_payload(tmp_path: Pat
     }
     assert isinstance(result["selections"], list)
     assert isinstance(result["citations"], list)
+    assert set(result["audit"].keys()) == {
+        "search_queries",
+        "dedupe_counts",
+        "budget_enforcement",
+        "ranking_debug",
+    }
+    ranking_debug = result["audit"]["ranking_debug"]
+    assert set(ranking_debug.keys()) == {
+        "candidate_count",
+        "definition_match_count",
+        "reference_proximity_count",
+        "top_candidates",
+    }
+    assert isinstance(ranking_debug["top_candidates"], list)
     if result["selections"]:
         first = result["selections"][0]
         assert set(first.keys()) == {

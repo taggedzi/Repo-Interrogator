@@ -7,6 +7,55 @@
       "after": 3,
       "before": 5
     },
+    "ranking_debug": {
+      "candidate_count": 3,
+      "definition_match_count": 1,
+      "reference_proximity_count": 0,
+      "top_candidates": [
+        {
+          "definition_match": true,
+          "end_line": 7,
+          "min_definition_distance": 1000000000,
+          "path": "src/service.py",
+          "path_name_relevance": 1,
+          "range_size_penalty": 4,
+          "rank_position": 1,
+          "reference_count_in_range": 0,
+          "search_score": 2.5,
+          "selected": true,
+          "source_query": "service run parser",
+          "start_line": 4
+        },
+        {
+          "definition_match": false,
+          "end_line": 18,
+          "min_definition_distance": 1000000000,
+          "path": "src/app.py",
+          "path_name_relevance": 0,
+          "range_size_penalty": 8,
+          "rank_position": 2,
+          "reference_count_in_range": 0,
+          "search_score": 1.6,
+          "selected": true,
+          "source_query": "service run parser",
+          "start_line": 11
+        },
+        {
+          "definition_match": false,
+          "end_line": 8,
+          "min_definition_distance": 1000000000,
+          "path": "src/utils.py",
+          "path_name_relevance": 0,
+          "range_size_penalty": 6,
+          "rank_position": 3,
+          "reference_count_in_range": 0,
+          "search_score": 1.2,
+          "selected": false,
+          "source_query": "parser",
+          "start_line": 3
+        }
+      ]
+    },
     "search_queries": [
       "service run parser",
       "service",
