@@ -65,6 +65,33 @@ class BundleRankingDebugCandidate:
 
 
 @dataclass(slots=True, frozen=True)
+class BundleSkippedCandidate:
+    """Bounded deterministic skip-debug entry for one candidate hit."""
+
+    path: str
+    start_line: int
+    end_line: int
+    source_query: str
+    reason: str
+
+
+@dataclass(slots=True, frozen=True)
+class BundleWhyNotSelectedSummary:
+    """Bounded deterministic skip summary for bundle diagnostics."""
+
+    total_skipped_candidates: int
+    reason_counts: dict[str, int]
+    top_skipped: tuple[BundleSkippedCandidate, ...]
+
+
+@dataclass(slots=True, frozen=True)
+class BundleSelectionDebug:
+    """Selection diagnostics payload for bounded explainability."""
+
+    why_not_selected_summary: BundleWhyNotSelectedSummary
+
+
+@dataclass(slots=True, frozen=True)
 class BundleAudit:
     """Deterministic audit details for bundling decisions."""
 
@@ -76,6 +103,7 @@ class BundleAudit:
     ranking_definition_match_count: int
     ranking_reference_proximity_count: int
     ranking_top_candidates: tuple[BundleRankingDebugCandidate, ...]
+    selection_debug: BundleSelectionDebug
 
 
 @dataclass(slots=True, frozen=True)

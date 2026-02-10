@@ -56,3 +56,14 @@ def test_bundle_budget_enforcement_limits_files_and_lines() -> None:
     assert bundle.totals.truncated is True
     assert len(bundle.selections) == 2
     assert [s.path for s in bundle.selections] == ["src/a.py", "src/b.py"]
+    summary = bundle.audit.selection_debug.why_not_selected_summary
+    assert summary.total_skipped_candidates == 1
+    assert summary.reason_counts == {
+        "file_budget": 1,
+        "line_budget": 0,
+        "zero_lines": 0,
+        "other": 0,
+    }
+    assert len(summary.top_skipped) == 1
+    assert summary.top_skipped[0].reason == "file_budget"
+    assert summary.top_skipped[0].path == "src/c.py"

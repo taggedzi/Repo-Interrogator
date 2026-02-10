@@ -56,6 +56,26 @@
         }
       ]
     },
+    "selection_debug": {
+      "why_not_selected_summary": {
+        "reason_counts": {
+          "file_budget": 1,
+          "line_budget": 0,
+          "other": 0,
+          "zero_lines": 0
+        },
+        "top_skipped": [
+          {
+            "end_line": 8,
+            "path": "src/utils.py",
+            "reason": "file_budget",
+            "source_query": "parser",
+            "start_line": 3
+          }
+        ],
+        "total_skipped_candidates": 1
+      }
+    },
     "search_queries": [
       "service run parser",
       "service",

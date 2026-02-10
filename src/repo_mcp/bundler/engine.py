@@ -15,7 +15,10 @@ from repo_mcp.bundler.models import (
     BundleRankingDebugCandidate,
     BundleResult,
     BundleSelection,
+    BundleSelectionDebug,
+    BundleSkippedCandidate,
     BundleTotals,
+    BundleWhyNotSelectedSummary,
 )
 from repo_mcp.index.search import tokenize
 
@@ -140,7 +143,11 @@ def build_context_bundle(
     ranking_seconds = time.perf_counter() - ranking_started
 
     budget_started = time.perf_counter()
-    selections, totals, budget_notes = _select_with_budget(ranked, budget, read_lines_fn)
+    selections, totals, budget_notes, why_not_selected = _select_with_budget(
+        ranked,
+        budget,
+        read_lines_fn,
+    )
     budget_enforcement_seconds = time.perf_counter() - budget_started
     citations = tuple(
         BundleCitation(
@@ -167,6 +174,7 @@ def build_context_bundle(
             if hit.ranking is not None and hit.ranking.reference_count_in_range > 0
         ),
         ranking_top_candidates=_build_ranking_debug_candidates(ranked, selections),
+        selection_debug=BundleSelectionDebug(why_not_selected_summary=why_not_selected),
     )
     bundle_id = _bundle_id(prompt_fingerprint, selections, totals)
     result = BundleResult(
@@ -290,6 +298,7 @@ class _SymbolRange:
 
 
 _ReferenceLineIndex = dict[str, tuple[int, ...]]
+_TOP_SKIPPED_LIMIT = 20
 
 
 def _dedupe_hits(hits: list[_Hit]) -> list[_Hit]:
@@ -624,27 +633,69 @@ def _select_with_budget(
     hits: list[_Hit],
     budget: BundleBudget,
     read_lines_fn: ReadLinesFn,
-) -> tuple[tuple[BundleSelection, ...], BundleTotals, list[str]]:
+) -> tuple[
+    tuple[BundleSelection, ...],
+    BundleTotals,
+    list[str],
+    BundleWhyNotSelectedSummary,
+]:
     selected: list[BundleSelection] = []
     selected_paths: set[str] = set()
     total_lines = 0
     truncated = False
     notes: list[str] = []
+    skipped: list[BundleSkippedCandidate] = []
+    reason_counts = {
+        "file_budget": 0,
+        "line_budget": 0,
+        "zero_lines": 0,
+        "other": 0,
+    }
 
     for hit in hits:
         line_count = max(0, hit.end_line - hit.start_line + 1)
         if line_count == 0:
             notes.append(f"skipped_zero_lines:{hit.path}:{hit.start_line}-{hit.end_line}")
+            skipped.append(
+                BundleSkippedCandidate(
+                    path=hit.path,
+                    start_line=hit.start_line,
+                    end_line=hit.end_line,
+                    source_query=hit.source_query,
+                    reason="zero_lines",
+                )
+            )
+            reason_counts["zero_lines"] += 1
             continue
         next_total = total_lines + line_count
         next_file_count = len(selected_paths) + (0 if hit.path in selected_paths else 1)
         if next_file_count > budget.max_files:
             truncated = True
             notes.append(f"skipped_file_budget:{hit.path}:{hit.start_line}-{hit.end_line}")
+            skipped.append(
+                BundleSkippedCandidate(
+                    path=hit.path,
+                    start_line=hit.start_line,
+                    end_line=hit.end_line,
+                    source_query=hit.source_query,
+                    reason="file_budget",
+                )
+            )
+            reason_counts["file_budget"] += 1
             continue
         if next_total > budget.max_total_lines:
             truncated = True
             notes.append(f"skipped_line_budget:{hit.path}:{hit.start_line}-{hit.end_line}")
+            skipped.append(
+                BundleSkippedCandidate(
+                    path=hit.path,
+                    start_line=hit.start_line,
+                    end_line=hit.end_line,
+                    source_query=hit.source_query,
+                    reason="line_budget",
+                )
+            )
+            reason_counts["line_budget"] += 1
             continue
 
         lines = read_lines_fn(hit.path, hit.start_line, hit.end_line)
@@ -671,7 +722,12 @@ def _select_with_budget(
         selected_lines=total_lines,
         truncated=truncated,
     )
-    return tuple(selected), totals, notes
+    why_not_selected = BundleWhyNotSelectedSummary(
+        total_skipped_candidates=len(skipped),
+        reason_counts=reason_counts,
+        top_skipped=tuple(skipped[:_TOP_SKIPPED_LIMIT]),
+    )
+    return tuple(selected), totals, notes, why_not_selected
 
 
 def _build_rationale(hit: _Hit) -> str:

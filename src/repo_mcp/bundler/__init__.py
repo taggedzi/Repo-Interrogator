@@ -7,7 +7,10 @@ from .models import (
     BundleCitation,
     BundleResult,
     BundleSelection,
+    BundleSelectionDebug,
+    BundleSkippedCandidate,
     BundleTotals,
+    BundleWhyNotSelectedSummary,
 )
 
 __all__ = [
@@ -15,7 +18,10 @@ __all__ = [
     "BundleBudget",
     "BundleCitation",
     "BundleResult",
+    "BundleSelectionDebug",
     "BundleSelection",
+    "BundleSkippedCandidate",
     "BundleTotals",
+    "BundleWhyNotSelectedSummary",
     "build_context_bundle",
 ]

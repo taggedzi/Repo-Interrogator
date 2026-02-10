@@ -56,6 +56,7 @@ def test_repo_build_context_bundle_tool_returns_structured_payload(tmp_path: Pat
         "dedupe_counts",
         "budget_enforcement",
         "ranking_debug",
+        "selection_debug",
     }
     ranking_debug = result["audit"]["ranking_debug"]
     assert set(ranking_debug.keys()) == {
@@ -65,6 +66,16 @@ def test_repo_build_context_bundle_tool_returns_structured_payload(tmp_path: Pat
         "top_candidates",
     }
     assert isinstance(ranking_debug["top_candidates"], list)
+    selection_debug = result["audit"]["selection_debug"]
+    assert set(selection_debug.keys()) == {"why_not_selected_summary"}
+    why_not_selected = selection_debug["why_not_selected_summary"]
+    assert set(why_not_selected.keys()) == {
+        "total_skipped_candidates",
+        "reason_counts",
+        "top_skipped",
+    }
+    assert isinstance(why_not_selected["reason_counts"], dict)
+    assert isinstance(why_not_selected["top_skipped"], list)
     if result["selections"]:
         first = result["selections"][0]
         assert set(first.keys()) == {

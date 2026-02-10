@@ -111,6 +111,22 @@ def _to_payload(bundle: BundleResult) -> dict[str, object]:
                 "reference_proximity_count": bundle.audit.ranking_reference_proximity_count,
                 "top_candidates": [asdict(item) for item in bundle.audit.ranking_top_candidates],
             },
+            "selection_debug": {
+                "why_not_selected_summary": {
+                    "total_skipped_candidates": (
+                        bundle.audit.selection_debug.why_not_selected_summary.total_skipped_candidates
+                    ),
+                    "reason_counts": (
+                        bundle.audit.selection_debug.why_not_selected_summary.reason_counts
+                    ),
+                    "top_skipped": [
+                        asdict(item)
+                        for item in (
+                            bundle.audit.selection_debug.why_not_selected_summary.top_skipped
+                        )
+                    ],
+                }
+            },
         },
     }
 

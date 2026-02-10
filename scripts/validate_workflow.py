@@ -726,6 +726,80 @@ class WorkflowValidator:
                     expected="top candidate has ranking debug keys",
                     actual=f"sample={type(sample).__name__}",
                 )
+        selection_debug = audit.get("selection_debug") if isinstance(audit, dict) else None
+        self._assert_true(
+            "bundle.selection_debug_shape",
+            isinstance(selection_debug, dict) and {"why_not_selected_summary"}.issubset(
+                set(selection_debug.keys())
+            ),
+            "Bundle audit should include selection_debug explainability fields.",
+            expected="selection_debug has why_not_selected_summary",
+            actual=f"selection_debug={type(selection_debug).__name__}",
+        )
+        if isinstance(selection_debug, dict):
+            why_not_selected_summary = selection_debug.get("why_not_selected_summary")
+            self._assert_true(
+                "bundle.why_not_selected_summary_shape",
+                isinstance(why_not_selected_summary, dict)
+                and {
+                    "total_skipped_candidates",
+                    "reason_counts",
+                    "top_skipped",
+                }.issubset(set(why_not_selected_summary.keys())),
+                (
+                    "Bundle selection_debug.why_not_selected_summary should include"
+                    " bounded skip explainability fields."
+                ),
+                expected=(
+                    "why_not_selected_summary has total_skipped_candidates/"
+                    "reason_counts/top_skipped"
+                ),
+                actual=f"why_not_selected_summary={type(why_not_selected_summary).__name__}",
+            )
+            if isinstance(why_not_selected_summary, dict):
+                self._assert_true(
+                    "bundle.why_not_selected_reason_counts_type",
+                    isinstance(why_not_selected_summary.get("reason_counts"), dict),
+                    (
+                        "Bundle selection_debug.why_not_selected_summary.reason_counts"
+                        " should be a dict."
+                    ),
+                    expected="reason_counts is dict",
+                    actual=(
+                        "reason_counts type="
+                        f"{type(why_not_selected_summary.get('reason_counts')).__name__}"
+                    ),
+                )
+                top_skipped = why_not_selected_summary.get("top_skipped")
+                self._assert_true(
+                    "bundle.why_not_selected_top_skipped_type",
+                    isinstance(top_skipped, list),
+                    (
+                        "Bundle selection_debug.why_not_selected_summary.top_skipped"
+                        " should be a list."
+                    ),
+                    expected="top_skipped is list",
+                    actual=f"top_skipped type={type(top_skipped).__name__}",
+                )
+                if isinstance(top_skipped, list) and top_skipped:
+                    skipped_sample = top_skipped[0]
+                    self._assert_true(
+                        "bundle.why_not_selected_top_skipped_shape",
+                        isinstance(skipped_sample, dict)
+                        and {
+                            "path",
+                            "start_line",
+                            "end_line",
+                            "source_query",
+                            "reason",
+                        }.issubset(set(skipped_sample.keys())),
+                        (
+                            "why_not_selected top_skipped entries should include"
+                            " deterministic skip-debug fields."
+                        ),
+                        expected="top_skipped item has skip-debug keys",
+                        actual=f"sample={type(skipped_sample).__name__}",
+                    )
 
     def _step_audit(self) -> None:
         req_id = "wf-8-audit"
