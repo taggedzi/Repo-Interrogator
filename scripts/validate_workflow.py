@@ -54,6 +54,7 @@ class WorkflowValidator:
         profile_enabled: bool,
         profile_output_path: Path | None,
         profile_references: bool,
+        profile_bundler: bool,
     ) -> None:
         self.repo_root = repo_root.resolve()
         self.data_dir = data_dir.resolve() if data_dir is not None else None
@@ -62,6 +63,7 @@ class WorkflowValidator:
         self.profile_enabled = profile_enabled
         self.profile_output_path = profile_output_path
         self.profile_references = profile_references
+        self.profile_bundler = profile_bundler
         self.proc: subprocess.Popen[str] | None = None
         self.results: list[CheckResult] = []
         self.step_timings: list[StepTiming] = []
@@ -135,6 +137,8 @@ class WorkflowValidator:
             cmd.extend(["--data-dir", str(self.data_dir)])
         if self.profile_references:
             env["REPO_MCP_PROFILE_REFERENCES"] = "1"
+        if self.profile_bundler:
+            env["REPO_MCP_PROFILE_BUNDLER"] = "1"
 
         print(f"$ {' '.join(cmd)}")
         self.proc = subprocess.Popen(
@@ -903,6 +907,14 @@ def parse_args() -> argparse.Namespace:
             "and adapter resolution paths."
         ),
     )
+    parser.add_argument(
+        "--profile-bundler",
+        action="store_true",
+        help=(
+            "Enable server-side targeted profiling for bundler ranking, dedupe, "
+            "and budget enforcement paths."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -918,6 +930,7 @@ def main() -> int:
         profile_enabled=profile_enabled,
         profile_output_path=profile_output,
         profile_references=bool(args.profile_references),
+        profile_bundler=bool(args.profile_bundler),
     )
     if args.cprofile_output:
         profiler = cProfile.Profile()

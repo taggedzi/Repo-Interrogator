@@ -646,6 +646,11 @@ Benchmark protocol:
   * candidate discovery timings (`discover_files`, policy checks, file reads)
   * adapter resolution timings (`adapter_select`, resolver execution, normalize/sort)
   * per-run reference profiling artifacts and aggregate summaries in benchmark output.
+* Targeted bundler profiling (opt-in) must capture and retain:
+  * dedupe timing
+  * ranking timing
+  * budget enforcement timing
+  * per-run bundler profiling artifacts and aggregate summaries in benchmark output.
 
 Non-goals for baseline profiling:
 

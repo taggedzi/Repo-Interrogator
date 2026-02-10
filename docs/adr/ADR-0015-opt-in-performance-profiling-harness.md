@@ -33,6 +33,11 @@ Adopt a built-in, opt-in profiling harness centered on `scripts/validate_workflo
   * candidate discovery timing slices
   * adapter resolution timing slices
   * per-run JSONL artifacts retained with benchmark sessions
+* Add targeted bundler profiling mode that captures:
+  * dedupe timing slices
+  * ranking timing slices
+  * budget enforcement timing slices
+  * per-run JSONL artifacts retained with benchmark sessions
 
 ### Rationale
 

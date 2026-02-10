@@ -40,9 +40,11 @@ class BenchmarkRun:
     elapsed_seconds: float
     profile_path: Path
     references_profile_path: Path | None
+    bundler_profile_path: Path | None
     total_elapsed_seconds: float | None
     steps: dict[str, float]
     references_metrics: dict[str, float]
+    bundler_metrics: dict[str, float]
 
 
 FIXTURE_PROFILES: dict[str, FixtureProfile] = {
@@ -128,6 +130,14 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Enable targeted repo.references profiling (candidate discovery and adapter "
             "resolution timings) and include per-run artifacts in session output."
+        ),
+    )
+    parser.add_argument(
+        "--profile-bundler",
+        action="store_true",
+        help=(
+            "Enable targeted bundler profiling (dedupe/ranking/budget enforcement timings) "
+            "and include per-run artifacts in session output."
         ),
     )
     return parser.parse_args()
@@ -404,12 +414,17 @@ def run_one(
     run_index: int,
     response_timeout_seconds: float,
     profile_references: bool,
+    profile_bundler: bool,
 ) -> BenchmarkRun:
     profile_path = scenario_out_dir / f"run_{run_index:02d}.json"
     references_profile_path: Path | None = None
+    bundler_profile_path: Path | None = None
     references_source_path = repo_root / ".repo_mcp" / "perf" / "references_profile.jsonl"
+    bundler_source_path = repo_root / ".repo_mcp" / "perf" / "bundler_profile.jsonl"
     if profile_references and references_source_path.exists():
         references_source_path.unlink()
+    if profile_bundler and bundler_source_path.exists():
+        bundler_source_path.unlink()
     cmd = [
         sys.executable,
         "scripts/validate_workflow.py",
@@ -423,6 +438,8 @@ def run_one(
     ]
     if profile_references:
         cmd.append("--profile-references")
+    if profile_bundler:
+        cmd.append("--profile-bundler")
     print(f"[{scenario} run {run_index}] $ {' '.join(cmd)}")
     started = time.perf_counter()
     completed = subprocess.run(cmd, check=False)
@@ -431,6 +448,7 @@ def run_one(
     total_elapsed_seconds: float | None = None
     steps: dict[str, float] = {}
     references_metrics: dict[str, float] = {}
+    bundler_metrics: dict[str, float] = {}
     if profile_path.exists():
         payload = json.loads(profile_path.read_text(encoding="utf-8"))
         raw_total = payload.get("total_elapsed_seconds")
@@ -449,6 +467,10 @@ def run_one(
         references_profile_path = scenario_out_dir / f"references_run_{run_index:02d}.jsonl"
         shutil.copy2(references_source_path, references_profile_path)
         references_metrics = summarize_reference_profile(references_profile_path)
+    if profile_bundler and bundler_source_path.exists():
+        bundler_profile_path = scenario_out_dir / f"bundler_run_{run_index:02d}.jsonl"
+        shutil.copy2(bundler_source_path, bundler_profile_path)
+        bundler_metrics = summarize_bundler_profile(bundler_profile_path)
 
     return BenchmarkRun(
         scenario=scenario,
@@ -457,9 +479,11 @@ def run_one(
         elapsed_seconds=elapsed,
         profile_path=profile_path,
         references_profile_path=references_profile_path,
+        bundler_profile_path=bundler_profile_path,
         total_elapsed_seconds=total_elapsed_seconds,
         steps=steps,
         references_metrics=references_metrics,
+        bundler_metrics=bundler_metrics,
     )
 
 
@@ -534,6 +558,46 @@ def summarize_reference_profile(path: Path) -> dict[str, float]:
     return metrics
 
 
+def summarize_bundler_profile(path: Path) -> dict[str, float]:
+    metrics: dict[str, float] = {}
+    if not path.exists():
+        return metrics
+    dedupe_seconds: list[float] = []
+    ranking_seconds: list[float] = []
+    budget_enforcement_seconds: list[float] = []
+    total_build_seconds: list[float] = []
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                record = json.loads(stripped)
+            except json.JSONDecodeError:
+                continue
+            dedupe_value = record.get("dedupe_seconds")
+            if isinstance(dedupe_value, (int, float)):
+                dedupe_seconds.append(float(dedupe_value))
+            ranking_value = record.get("ranking_seconds")
+            if isinstance(ranking_value, (int, float)):
+                ranking_seconds.append(float(ranking_value))
+            budget_value = record.get("budget_enforcement_seconds")
+            if isinstance(budget_value, (int, float)):
+                budget_enforcement_seconds.append(float(budget_value))
+            total_value = record.get("total_build_seconds")
+            if isinstance(total_value, (int, float)):
+                total_build_seconds.append(float(total_value))
+    if dedupe_seconds:
+        metrics["dedupe_seconds_mean"] = statistics.fmean(dedupe_seconds)
+    if ranking_seconds:
+        metrics["ranking_seconds_mean"] = statistics.fmean(ranking_seconds)
+    if budget_enforcement_seconds:
+        metrics["budget_enforcement_seconds_mean"] = statistics.fmean(budget_enforcement_seconds)
+    if total_build_seconds:
+        metrics["total_build_seconds_mean"] = statistics.fmean(total_build_seconds)
+    return metrics
+
+
 def summarize_runs(runs: list[BenchmarkRun]) -> dict[str, object]:
     totals = [item.total_elapsed_seconds for item in runs if item.total_elapsed_seconds is not None]
     step_names = sorted({step for run in runs for step in run.steps.keys()})
@@ -575,6 +639,18 @@ def summarize_runs(runs: list[BenchmarkRun]) -> dict[str, object]:
             continue
         references_stats[metric_name] = _summarize_metric(values)
 
+    bundler_metric_names = sorted(
+        {metric_name for run in runs for metric_name in run.bundler_metrics.keys()}
+    )
+    bundler_stats: dict[str, dict[str, float]] = {}
+    for metric_name in bundler_metric_names:
+        values = [
+            run.bundler_metrics[metric_name] for run in runs if metric_name in run.bundler_metrics
+        ]
+        if not values:
+            continue
+        bundler_stats[metric_name] = _summarize_metric(values)
+
     return {
         "runs": len(runs),
         "failures": [run.run_index for run in runs if run.exit_code != 0],
@@ -587,6 +663,10 @@ def summarize_runs(runs: list[BenchmarkRun]) -> dict[str, object]:
             if run.references_profile_path is not None
         ],
         "references_profile_metrics": references_stats,
+        "run_bundler_profiles": [
+            str(run.bundler_profile_path) for run in runs if run.bundler_profile_path is not None
+        ],
+        "bundler_profile_metrics": bundler_stats,
     }
 
 
@@ -633,6 +713,17 @@ def profile_summary_from_scenario(name: str, summary: dict[str, object]) -> list
         lines.append("  references_profile:")
         for metric_name in sorted(reference_stats.keys()):
             values = reference_stats[metric_name]
+            if not isinstance(values, dict):
+                continue
+            lines.append(
+                f"  - {metric_name}: min={values['min_seconds']:.6f}s, "
+                f"max={values['max_seconds']:.6f}s, mean={values['mean_seconds']:.6f}s"
+            )
+    bundler_stats = summary.get("bundler_profile_metrics")
+    if isinstance(bundler_stats, dict) and bundler_stats:
+        lines.append("  bundler_profile:")
+        for metric_name in sorted(bundler_stats.keys()):
+            values = bundler_stats[metric_name]
             if not isinstance(values, dict):
                 continue
             lines.append(
@@ -691,6 +782,7 @@ def main() -> int:
                 run_index=index,
                 response_timeout_seconds=args.response_timeout_seconds,
                 profile_references=bool(args.profile_references),
+                profile_bundler=bool(args.profile_bundler),
             )
             for index in range(1, args.runs + 1)
         ]
@@ -709,6 +801,7 @@ def main() -> int:
             "response_timeout_seconds": args.response_timeout_seconds,
             "retention_sessions": args.retention_sessions,
             "profile_references": bool(args.profile_references),
+            "profile_bundler": bool(args.profile_bundler),
             "scenario_repos": scenario_repos,
             "fixture_profiles": {
                 name: {

@@ -534,6 +534,12 @@ Enable targeted `repo.references` profiling in benchmark runs:
 .venv/bin/python scripts/benchmark_workflow.py --repo-root . --profile-references
 ```
 
+Enable targeted bundler profiling in benchmark runs:
+
+```bash
+.venv/bin/python scripts/benchmark_workflow.py --repo-root . --profile-bundler
+```
+
 Control retention for session artifacts:
 
 ```bash
@@ -545,6 +551,7 @@ Notes:
 - Profiling output is diagnostic metadata only; tool output contracts are unchanged.
 - Benchmark outputs are sessioned under `.repo_mcp/perf/session-*/` with a latest summary at `.repo_mcp/perf/benchmark_summary.json`.
 - With `--profile-references`, per-run `repo.references` timing artifacts are written as `references_run_*.jsonl` inside each scenario session directory.
+- With `--profile-bundler`, per-run bundler timing artifacts are written as `bundler_run_*.jsonl` inside each scenario session directory.
 
 ## Language Adapter Limitations
 

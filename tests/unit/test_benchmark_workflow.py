@@ -65,9 +65,11 @@ def test_summarize_runs_includes_expected_fields(tmp_path: Path) -> None:
         elapsed_seconds=10.0,
         profile_path=tmp_path / "run_01.json",
         references_profile_path=None,
+        bundler_profile_path=None,
         total_elapsed_seconds=9.5,
         steps={"repo.refresh_index": 4.0, "repo.build_context_bundle": 5.0},
         references_metrics={},
+        bundler_metrics={},
     )
     summary = module.summarize_runs([run])
     assert summary["runs"] == 1
@@ -138,3 +140,35 @@ def test_summarize_reference_profile_extracts_targeted_metrics(tmp_path: Path) -
     summary = module.summarize_reference_profile(profile_path)
     assert summary["candidate_discovery_seconds_mean"] == 1.1
     assert summary["adapter_select_seconds_mean"] == 0.045
+
+
+def test_summarize_bundler_profile_extracts_targeted_metrics(tmp_path: Path) -> None:
+    module = _load_benchmark_module()
+    profile_path = tmp_path / "bundler.jsonl"
+    profile_path.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "dedupe_seconds": 0.02,
+                        "ranking_seconds": 0.3,
+                        "budget_enforcement_seconds": 0.05,
+                        "total_build_seconds": 0.6,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "dedupe_seconds": 0.04,
+                        "ranking_seconds": 0.5,
+                        "budget_enforcement_seconds": 0.07,
+                        "total_build_seconds": 0.8,
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    summary = module.summarize_bundler_profile(profile_path)
+    assert summary["dedupe_seconds_mean"] == 0.03
+    assert summary["budget_enforcement_seconds_mean"] == 0.060000000000000005

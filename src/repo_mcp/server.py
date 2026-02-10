@@ -97,6 +97,11 @@ class StdioServer:
         ).strip().lower() in {"1", "true", "yes"}
         self._reference_profile_path = self._data_dir / "perf" / "references_profile.jsonl"
         self._reference_profile_sequence = 0
+        self._bundler_profile_enabled = os.getenv(
+            "REPO_MCP_PROFILE_BUNDLER", ""
+        ).strip().lower() in {"1", "true", "yes"}
+        self._bundler_profile_path = self._data_dir / "perf" / "bundler_profile.jsonl"
+        self._bundler_profile_sequence = 0
 
     def serve(self, in_stream: TextIO, out_stream: TextIO) -> None:
         """Process JSON-line requests from stdin and write JSON-line responses."""
@@ -514,6 +519,7 @@ class StdioServer:
             include_tests=include_tests,
             strategy="hybrid",
             top_k_per_query=self._limits.max_search_hits,
+            profile_sink=self._write_bundler_profile if self._bundler_profile_enabled else None,
         )
         response = _bundle_result_to_dict(result)
         warnings = self._write_last_bundle_artifacts(response)
@@ -749,6 +755,23 @@ class StdioServer:
         try:
             self._reference_profile_path.parent.mkdir(parents=True, exist_ok=True)
             with self._reference_profile_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(entry, sort_keys=True))
+                handle.write("\n")
+        except OSError:
+            return
+
+    def _write_bundler_profile(self, payload: dict[str, object]) -> None:
+        if not self._bundler_profile_enabled:
+            return
+        self._bundler_profile_sequence += 1
+        entry = {
+            "timestamp": utc_timestamp(),
+            "sequence": self._bundler_profile_sequence,
+            **payload,
+        }
+        try:
+            self._bundler_profile_path.parent.mkdir(parents=True, exist_ok=True)
+            with self._bundler_profile_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(entry, sort_keys=True))
                 handle.write("\n")
         except OSError:

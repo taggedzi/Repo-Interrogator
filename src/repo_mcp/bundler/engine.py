@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import time
 from dataclasses import asdict, dataclass, replace
 from typing import Protocol
 
@@ -52,6 +53,13 @@ class ReferenceLookupFn(Protocol):
         """Return declaration-linked reference records for one symbol."""
 
 
+class BundleProfileSink(Protocol):
+    """Optional callback used for targeted bundler profiling payloads."""
+
+    def __call__(self, payload: dict[str, object]) -> None:
+        """Consume one deterministic bundler profile payload."""
+
+
 def build_context_bundle(
     prompt: str,
     budget: BundleBudget,
@@ -63,8 +71,10 @@ def build_context_bundle(
     top_k_per_query: int = 20,
     outline_fn: OutlineFn | None = None,
     reference_lookup_fn: ReferenceLookupFn | None = None,
+    profile_sink: BundleProfileSink | None = None,
 ) -> BundleResult:
     """Build deterministic context bundle using multi-query search and budgets."""
+    started = time.perf_counter()
     if budget.max_files < 1:
         raise ValueError("budget.max_files must be >= 1")
     if budget.max_total_lines < 1:
@@ -89,13 +99,21 @@ def build_context_bundle(
             )
             raw_hits.append(candidate)
 
+    dedupe_started = time.perf_counter()
     deduped = _dedupe_hits(raw_hits)
+    dedupe_seconds = time.perf_counter() - dedupe_started
+
+    ranking_started = time.perf_counter()
     ranked = _rank_hits(
         deduped,
         prompt_terms=prompt_terms,
         reference_lookup_fn=reference_lookup_fn,
     )
+    ranking_seconds = time.perf_counter() - ranking_started
+
+    budget_started = time.perf_counter()
     selections, totals, budget_notes = _select_with_budget(ranked, budget, read_lines_fn)
+    budget_enforcement_seconds = time.perf_counter() - budget_started
     citations = tuple(
         BundleCitation(
             path=selection.path,
@@ -123,7 +141,7 @@ def build_context_bundle(
         ranking_top_candidates=_build_ranking_debug_candidates(ranked, selections),
     )
     bundle_id = _bundle_id(prompt_fingerprint, selections, totals)
-    return BundleResult(
+    result = BundleResult(
         bundle_id=bundle_id,
         prompt_fingerprint=prompt_fingerprint,
         strategy=strategy,
@@ -133,6 +151,27 @@ def build_context_bundle(
         citations=citations,
         audit=audit,
     )
+    if profile_sink is not None:
+        profile_sink(
+            {
+                "dedupe_seconds": dedupe_seconds,
+                "ranking_seconds": ranking_seconds,
+                "budget_enforcement_seconds": budget_enforcement_seconds,
+                "total_build_seconds": time.perf_counter() - started,
+                "dedupe_before": len(raw_hits),
+                "dedupe_after": len(deduped),
+                "ranking_candidate_count": len(ranked),
+                "selected_excerpt_count": len(selections),
+                "selected_file_count": totals.selected_files,
+                "budget_skipped_file_count": sum(
+                    1 for note in budget_notes if note.startswith("skipped_file_budget:")
+                ),
+                "budget_skipped_line_count": sum(
+                    1 for note in budget_notes if note.startswith("skipped_line_budget:")
+                ),
+            }
+        )
+    return result
 
 
 def _build_queries(prompt: str) -> list[str]:
