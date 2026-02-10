@@ -624,6 +624,7 @@ Baseline profiling contract:
   * bounded environment snapshot (platform, Python version, CPU count, load average when available, process max RSS)
   * optional JSON artifact output for offline comparison
   * optional Python `cProfile` output for software hotspot diagnosis
+  * optional server-process `cProfile` output for internal tool-path hotspot diagnosis
 * A maintained profiling playbook must document diagnostic workflow and hardware-vs-software bottleneck triage (`docs/PERFORMANCE_PLAYBOOK.md`).
 * Profiling output must avoid secrets and full file-content dumps.
 
@@ -652,12 +653,18 @@ Benchmark protocol:
   * ranking timing
   * budget enforcement timing
   * per-run bundler profiling artifacts and aggregate summaries in benchmark output.
+* Optional regression guardrails (local/CI) must support:
+  * comparing current benchmark means against a baseline `benchmark_summary.json`,
+  * configurable drift threshold percent,
+  * non-blocking warning emission in CLI and summary artifacts,
+  * deterministic warning ordering (scenario then metric).
 
 Non-goals for baseline profiling:
 
 * always-on production profiling
 * non-deterministic sampling profilers in default workflow
 * external telemetry backends
+* blocking CI/build failure solely from perf drift warnings
 
 ---
 

@@ -8,6 +8,7 @@ import cProfile
 import json
 import os
 import platform
+import pstats
 import select
 import subprocess
 import sys
@@ -55,6 +56,7 @@ class WorkflowValidator:
         profile_output_path: Path | None,
         profile_references: bool,
         profile_bundler: bool,
+        server_cprofile_output: Path | None,
     ) -> None:
         self.repo_root = repo_root.resolve()
         self.data_dir = data_dir.resolve() if data_dir is not None else None
@@ -64,6 +66,7 @@ class WorkflowValidator:
         self.profile_output_path = profile_output_path
         self.profile_references = profile_references
         self.profile_bundler = profile_bundler
+        self.server_cprofile_output = server_cprofile_output
         self.proc: subprocess.Popen[str] | None = None
         self.results: list[CheckResult] = []
         self.step_timings: list[StepTiming] = []
@@ -139,6 +142,8 @@ class WorkflowValidator:
             env["REPO_MCP_PROFILE_REFERENCES"] = "1"
         if self.profile_bundler:
             env["REPO_MCP_PROFILE_BUNDLER"] = "1"
+        if self.server_cprofile_output is not None:
+            env["REPO_MCP_SERVER_CPROFILE_OUTPUT"] = str(self.server_cprofile_output)
 
         print(f"$ {' '.join(cmd)}")
         self.proc = subprocess.Popen(
@@ -915,12 +920,51 @@ def parse_args() -> argparse.Namespace:
             "and budget enforcement paths."
         ),
     )
+    parser.add_argument(
+        "--server-cprofile-output",
+        default=None,
+        help=(
+            "Optional path to write server-process cProfile .pstats for internal "
+            "CPU hotspot analysis."
+        ),
+    )
+    parser.add_argument(
+        "--server-cprofile-top",
+        type=int,
+        default=20,
+        help=(
+            "Number of top cumulative functions to print for server cProfile summary. "
+            "Default: 20."
+        ),
+    )
     return parser.parse_args()
+
+
+def summarize_cprofile(path: Path, top: int) -> list[str]:
+    """Build a compact cumulative-time summary from a .pstats artifact."""
+    stats = pstats.Stats(str(path))
+    entries: list[tuple[float, str]] = []
+    for func, (_cc, _nc, _tt, ct, _callers) in stats.stats.items():
+        if ct <= 0:
+            continue
+        filename, lineno, funcname = func
+        label = f"{filename}:{lineno}({funcname})"
+        entries.append((ct, label))
+    entries.sort(key=lambda item: item[0], reverse=True)
+    lines = [f"Top {min(top, len(entries))} cumulative server cProfile functions:"]
+    for elapsed, label in entries[:top]:
+        lines.append(f"- {elapsed:.3f}s {label}")
+    return lines
 
 
 def main() -> int:
     args = parse_args()
+    if args.server_cprofile_top < 1:
+        raise SystemExit("--server-cprofile-top must be >= 1")
     profile_output = Path(args.profile_output).resolve() if args.profile_output else None
+    server_cprofile_output = (
+        Path(args.server_cprofile_output).resolve() if args.server_cprofile_output else None
+    )
     profile_enabled = bool(args.profile) or profile_output is not None
     validator = WorkflowValidator(
         repo_root=Path(args.repo_root),
@@ -931,6 +975,7 @@ def main() -> int:
         profile_output_path=profile_output,
         profile_references=bool(args.profile_references),
         profile_bundler=bool(args.profile_bundler),
+        server_cprofile_output=server_cprofile_output,
     )
     if args.cprofile_output:
         profiler = cProfile.Profile()
@@ -941,8 +986,20 @@ def main() -> int:
         cprofile_path.parent.mkdir(parents=True, exist_ok=True)
         profiler.dump_stats(str(cprofile_path))
         print(f"cProfile stats written to {cprofile_path}")
-        return exit_code
-    return validator.run()
+    else:
+        exit_code = validator.run()
+
+    if server_cprofile_output is not None:
+        if server_cprofile_output.exists():
+            print(f"Server cProfile stats written to {server_cprofile_output}")
+            for line in summarize_cprofile(
+                path=server_cprofile_output,
+                top=int(args.server_cprofile_top),
+            ):
+                print(line)
+        else:
+            print(f"Server cProfile output not found: {server_cprofile_output}")
+    return exit_code
 
 
 if __name__ == "__main__":

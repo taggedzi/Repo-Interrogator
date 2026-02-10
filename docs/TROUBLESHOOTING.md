@@ -131,5 +131,7 @@ What to do:
 2. run targeted modes:
    - `.venv/bin/python scripts/benchmark_workflow.py --repo-root . --profile-references`
    - `.venv/bin/python scripts/benchmark_workflow.py --repo-root . --profile-bundler`
-3. inspect artifacts under `.repo_mcp/perf/session-*/`
-4. use `docs/PERFORMANCE_PLAYBOOK.md` to classify hardware vs software bottlenecks and map timings to likely code paths
+3. optionally compare against prior baseline for drift warnings:
+   - `.venv/bin/python scripts/benchmark_workflow.py --repo-root . --regression-baseline .repo_mcp/perf/benchmark_summary.json --regression-threshold-percent 20`
+4. inspect artifacts under `.repo_mcp/perf/session-*/`
+5. use `docs/PERFORMANCE_PLAYBOOK.md` to classify hardware vs software bottlenecks and map timings to likely code paths

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import cProfile
 import fnmatch
 import json
 import os
@@ -916,7 +917,19 @@ def main(argv: list[str] | None = None) -> int:
         python_enabled=python_enabled,
     )
     server = create_server(repo_root=args.repo_root, cli_overrides=overrides)
-    server.serve(in_stream=sys.stdin, out_stream=sys.stdout)
+    cprofile_output_raw = os.getenv("REPO_MCP_SERVER_CPROFILE_OUTPUT", "").strip()
+    if cprofile_output_raw:
+        profiler = cProfile.Profile()
+        profiler.enable()
+        try:
+            server.serve(in_stream=sys.stdin, out_stream=sys.stdout)
+        finally:
+            profiler.disable()
+            output_path = Path(cprofile_output_raw).resolve()
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            profiler.dump_stats(str(output_path))
+    else:
+        server.serve(in_stream=sys.stdin, out_stream=sys.stdout)
     return 0
 
 

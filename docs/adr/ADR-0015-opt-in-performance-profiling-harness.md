@@ -23,6 +23,7 @@ Adopt a built-in, opt-in profiling harness centered on `scripts/validate_workflo
   * process max RSS where available
 * Add optional JSON profile artifact output for historical comparison.
 * Add optional `cProfile` `.pstats` output for software hotspot analysis.
+* Add optional server-process `cProfile` `.pstats` output for internal tool-path hotspot analysis.
 * Keep profiling disabled by default and explicitly enabled via CLI flags.
 * Adopt benchmark execution defaults:
   * scenario matrix: `self`, `medium`, `large`
@@ -38,6 +39,10 @@ Adopt a built-in, opt-in profiling harness centered on `scripts/validate_workflo
   * ranking timing slices
   * budget enforcement timing slices
   * per-run JSONL artifacts retained with benchmark sessions
+* Add optional regression guardrails for local/CI checks:
+  * compare current benchmark means against a baseline summary artifact
+  * emit deterministic drift warnings above a configurable threshold percent
+  * keep guardrails non-blocking (warnings do not fail the benchmark process)
 
 ### Rationale
 
@@ -49,6 +54,7 @@ Adopt a built-in, opt-in profiling harness centered on `scripts/validate_workflo
 
 * Profiling runs are slightly more complex to operate due to mode flags and artifacts.
 * Additional documentation and fixture-generation logic are required to operationalize scenario benchmarking and regression gates.
+* Teams can monitor perf drift in CI/local workflows without turning noise-prone thresholds into hard failures.
 * Hardware-level counters remain limited to what is safely available from standard library and host OS APIs.
 
 ### Revisit Triggers

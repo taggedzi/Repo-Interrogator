@@ -27,16 +27,29 @@ Scope:
 .venv/bin/python scripts/benchmark_workflow.py --repo-root . --profile-bundler
 ```
 
-4. If software hotspots are unclear, capture workflow `cProfile`:
+4. Run optional non-blocking regression guardrails against a saved baseline:
+
+```bash
+.venv/bin/python scripts/benchmark_workflow.py --repo-root . --regression-baseline .repo_mcp/perf/benchmark_summary.json --regression-threshold-percent 20
+```
+
+5. If software hotspots are unclear, capture workflow `cProfile`:
 
 ```bash
 .venv/bin/python scripts/validate_workflow.py --repo-root . --profile --cprofile-output .repo_mcp/perf/validate_profile.pstats
+```
+
+6. If client `cProfile` is mostly wait time, capture server-process `cProfile`:
+
+```bash
+.venv/bin/python scripts/validate_workflow.py --repo-root . --profile --server-cprofile-output .repo_mcp/perf/server_profile.pstats
 ```
 
 Protocol rules:
 - Keep benchmark defaults unless intentionally testing overrides (default runs per scenario: 3).
 - Compare sessions generated on the same machine state when possible.
 - Preserve artifacts for before/after comparisons; avoid deleting session history during diagnosis.
+- Treat guardrail warnings as triage input; they are intentionally non-blocking.
 
 ## 2) Artifact Map
 
@@ -45,6 +58,7 @@ Protocol rules:
 - Baseline per-run profile artifacts: `profile_run_*.json`
 - References-targeted artifacts: `references_run_*.jsonl`
 - Bundler-targeted artifacts: `bundler_run_*.jsonl`
+- Guardrail results: `regression_guardrails` object in each benchmark summary JSON
 
 ## 3) Hardware vs Software Triage
 

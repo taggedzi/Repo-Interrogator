@@ -516,6 +516,12 @@ Capture Python hotspot stats for deeper software profiling:
 .venv/bin/python scripts/validate_workflow.py --repo-root . --profile --cprofile-output /tmp/validate_profile.pstats
 ```
 
+Capture server-process hotspot stats (internal tool execution paths):
+
+```bash
+.venv/bin/python scripts/validate_workflow.py --repo-root . --profile --server-cprofile-output /tmp/server_profile.pstats
+```
+
 Run repeatable benchmark profiling (3 runs per scenario by default; scenarios: `self,medium,large`):
 
 ```bash
@@ -546,12 +552,19 @@ Control retention for session artifacts:
 .venv/bin/python scripts/benchmark_workflow.py --repo-root . --retention-sessions 15
 ```
 
+Run optional non-blocking drift checks against a baseline summary:
+
+```bash
+.venv/bin/python scripts/benchmark_workflow.py --repo-root . --regression-baseline .repo_mcp/perf/benchmark_summary.json --regression-threshold-percent 20
+```
+
 Notes:
 - Profiling is opt-in and disabled by default.
 - Profiling output is diagnostic metadata only; tool output contracts are unchanged.
 - Benchmark outputs are sessioned under `.repo_mcp/perf/session-*/` with a latest summary at `.repo_mcp/perf/benchmark_summary.json`.
 - With `--profile-references`, per-run `repo.references` timing artifacts are written as `references_run_*.jsonl` inside each scenario session directory.
 - With `--profile-bundler`, per-run bundler timing artifacts are written as `bundler_run_*.jsonl` inside each scenario session directory.
+- With `--regression-baseline`, non-blocking drift warnings are added to CLI output and `regression_guardrails` in summary JSON.
 - For bottleneck diagnosis workflow and interpretation guidance, see `docs/PERFORMANCE_PLAYBOOK.md`.
 
 ## Language Adapter Limitations

@@ -47,6 +47,19 @@ class BenchmarkRun:
     bundler_metrics: dict[str, float]
 
 
+@dataclass(frozen=True, slots=True)
+class RegressionRecord:
+    """One metric-level drift observation against a baseline summary."""
+
+    scenario: str
+    metric: str
+    baseline_mean_seconds: float
+    current_mean_seconds: float
+    delta_seconds: float
+    delta_percent: float
+    threshold_percent: float
+
+
 FIXTURE_PROFILES: dict[str, FixtureProfile] = {
     "medium": FixtureProfile(
         packages=12,
@@ -138,6 +151,23 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Enable targeted bundler profiling (dedupe/ranking/budget enforcement timings) "
             "and include per-run artifacts in session output."
+        ),
+    )
+    parser.add_argument(
+        "--regression-baseline",
+        default=None,
+        help=(
+            "Optional path to a prior benchmark_summary.json used for non-blocking "
+            "performance drift checks."
+        ),
+    )
+    parser.add_argument(
+        "--regression-threshold-percent",
+        type=float,
+        default=20.0,
+        help=(
+            "Percent increase threshold for drift warnings versus baseline means. "
+            "Default: 20.0."
         ),
     )
     return parser.parse_args()
@@ -733,12 +763,109 @@ def profile_summary_from_scenario(name: str, summary: dict[str, object]) -> list
     return lines
 
 
+def scenario_mean_metrics(summary: dict[str, object]) -> dict[str, float]:
+    """Extract deterministic metric mean values from one scenario summary."""
+    metrics: dict[str, float] = {}
+    total_stats = summary.get("total_elapsed_seconds")
+    if isinstance(total_stats, dict):
+        mean = total_stats.get("mean_seconds")
+        if isinstance(mean, (float, int)):
+            metrics["total_elapsed_seconds"] = float(mean)
+
+    step_stats = summary.get("step_elapsed_seconds")
+    if isinstance(step_stats, dict):
+        for step_name in sorted(step_stats.keys()):
+            values = step_stats[step_name]
+            if not isinstance(values, dict):
+                continue
+            mean = values.get("mean_seconds")
+            if isinstance(mean, (float, int)):
+                metrics[f"step:{step_name}"] = float(mean)
+
+    references_stats = summary.get("references_profile_metrics")
+    if isinstance(references_stats, dict):
+        for metric_name in sorted(references_stats.keys()):
+            values = references_stats[metric_name]
+            if not isinstance(values, dict):
+                continue
+            mean = values.get("mean_seconds")
+            if isinstance(mean, (float, int)):
+                metrics[f"references:{metric_name}"] = float(mean)
+
+    bundler_stats = summary.get("bundler_profile_metrics")
+    if isinstance(bundler_stats, dict):
+        for metric_name in sorted(bundler_stats.keys()):
+            values = bundler_stats[metric_name]
+            if not isinstance(values, dict):
+                continue
+            mean = values.get("mean_seconds")
+            if isinstance(mean, (float, int)):
+                metrics[f"bundler:{metric_name}"] = float(mean)
+
+    return metrics
+
+
+def evaluate_regression_guardrails(
+    current_summaries: dict[str, dict[str, object]],
+    baseline_summaries: dict[str, dict[str, object]],
+    threshold_percent: float,
+) -> list[RegressionRecord]:
+    """Compare current scenario means against baseline and return drift warnings."""
+    records: list[RegressionRecord] = []
+    for scenario in sorted(current_summaries.keys()):
+        current_summary = current_summaries.get(scenario)
+        baseline_summary = baseline_summaries.get(scenario)
+        if not isinstance(current_summary, dict) or not isinstance(baseline_summary, dict):
+            continue
+        current_metrics = scenario_mean_metrics(current_summary)
+        baseline_metrics = scenario_mean_metrics(baseline_summary)
+        for metric_name in sorted(current_metrics.keys()):
+            if metric_name not in baseline_metrics:
+                continue
+            baseline_value = baseline_metrics[metric_name]
+            current_value = current_metrics[metric_name]
+            if baseline_value <= 0.0:
+                continue
+            delta = current_value - baseline_value
+            delta_percent = (delta / baseline_value) * 100.0
+            if delta_percent > threshold_percent:
+                records.append(
+                    RegressionRecord(
+                        scenario=scenario,
+                        metric=metric_name,
+                        baseline_mean_seconds=baseline_value,
+                        current_mean_seconds=current_value,
+                        delta_seconds=delta,
+                        delta_percent=delta_percent,
+                        threshold_percent=threshold_percent,
+                    )
+                )
+    return records
+
+
+def load_baseline_summaries(path: Path) -> dict[str, dict[str, object]]:
+    """Load scenario summaries from a prior benchmark summary JSON artifact."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    scenarios = payload.get("scenarios")
+    if not isinstance(scenarios, dict):
+        raise ValueError("Baseline benchmark summary missing 'scenarios' object.")
+    result: dict[str, dict[str, object]] = {}
+    for scenario_name, scenario_summary in scenarios.items():
+        if not isinstance(scenario_name, str):
+            continue
+        if isinstance(scenario_summary, dict):
+            result[scenario_name] = scenario_summary
+    return result
+
+
 def main() -> int:
     args = parse_args()
     if args.runs < 1:
         raise SystemExit("--runs must be >= 1")
     if args.retention_sessions < 1:
         raise SystemExit("--retention-sessions must be >= 1")
+    if args.regression_threshold_percent < 0:
+        raise SystemExit("--regression-threshold-percent must be >= 0")
 
     scenarios = parse_scenarios(args.scenarios)
     source_repo_root = Path(args.repo_root).resolve()
@@ -789,9 +916,25 @@ def main() -> int:
         all_runs.extend(runs)
         scenario_summaries[scenario] = summarize_runs(runs)
 
+    guardrails_enabled = bool(args.regression_baseline)
+    guardrail_warnings: list[RegressionRecord] = []
+    baseline_path: Path | None = None
+    baseline_error: str | None = None
+    if guardrails_enabled:
+        baseline_path = Path(args.regression_baseline).resolve()
+        try:
+            baseline_summaries = load_baseline_summaries(baseline_path)
+            guardrail_warnings = evaluate_regression_guardrails(
+                current_summaries=scenario_summaries,
+                baseline_summaries=baseline_summaries,
+                threshold_percent=float(args.regression_threshold_percent),
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            baseline_error = str(exc)
+
     failures = sorted(f"{run.scenario}:{run.run_index}" for run in all_runs if run.exit_code != 0)
     summary = {
-        "benchmark_version": 3,
+        "benchmark_version": 4,
         "timestamp_utc": datetime.now(UTC).isoformat(),
         "session_id": session_id,
         "session_dir": str(session_dir),
@@ -802,6 +945,8 @@ def main() -> int:
             "retention_sessions": args.retention_sessions,
             "profile_references": bool(args.profile_references),
             "profile_bundler": bool(args.profile_bundler),
+            "regression_baseline": str(baseline_path) if baseline_path else None,
+            "regression_threshold_percent": float(args.regression_threshold_percent),
             "scenario_repos": scenario_repos,
             "fixture_profiles": {
                 name: {
@@ -816,6 +961,24 @@ def main() -> int:
             },
         },
         "scenarios": scenario_summaries,
+        "regression_guardrails": {
+            "enabled": guardrails_enabled,
+            "non_blocking": True,
+            "baseline_load_error": baseline_error,
+            "warning_count": len(guardrail_warnings),
+            "warnings": [
+                {
+                    "scenario": item.scenario,
+                    "metric": item.metric,
+                    "baseline_mean_seconds": item.baseline_mean_seconds,
+                    "current_mean_seconds": item.current_mean_seconds,
+                    "delta_seconds": item.delta_seconds,
+                    "delta_percent": item.delta_percent,
+                    "threshold_percent": item.threshold_percent,
+                }
+                for item in guardrail_warnings
+            ],
+        },
         "failures": failures,
     }
 
@@ -842,6 +1005,27 @@ def main() -> int:
     print(f"latest_summary_json: {latest_summary_path}")
     if removed_sessions:
         print(f"pruned_sessions: {removed_sessions}")
+    if guardrails_enabled:
+        print("regression_guardrails: enabled (non-blocking)")
+        if baseline_error:
+            print(f"regression_guardrails_error: {baseline_error}")
+        elif guardrail_warnings:
+            print(
+                "regression_guardrails_warnings: "
+                f"{len(guardrail_warnings)} metric(s) exceeded threshold"
+            )
+            for warning in guardrail_warnings:
+                print(
+                    "  - "
+                    f"{warning.scenario} {warning.metric}: "
+                    f"baseline={warning.baseline_mean_seconds:.6f}s, "
+                    f"current={warning.current_mean_seconds:.6f}s, "
+                    f"delta={warning.delta_seconds:.6f}s "
+                    f"({warning.delta_percent:.2f}%) "
+                    f"> threshold {warning.threshold_percent:.2f}%"
+                )
+        else:
+            print("regression_guardrails_warnings: none")
 
     return 0 if not failures else 1
 

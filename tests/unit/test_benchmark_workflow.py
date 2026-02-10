@@ -172,3 +172,112 @@ def test_summarize_bundler_profile_extracts_targeted_metrics(tmp_path: Path) -> 
     summary = module.summarize_bundler_profile(profile_path)
     assert summary["dedupe_seconds_mean"] == 0.03
     assert summary["budget_enforcement_seconds_mean"] == 0.060000000000000005
+
+
+def test_scenario_mean_metrics_extracts_expected_keys() -> None:
+    module = _load_benchmark_module()
+    summary = {
+        "total_elapsed_seconds": {"mean_seconds": 2.5},
+        "step_elapsed_seconds": {
+            "repo.refresh_index": {"mean_seconds": 1.2},
+            "repo.build_context_bundle": {"mean_seconds": 1.3},
+        },
+        "references_profile_metrics": {
+            "candidate_discovery_seconds_mean": {"mean_seconds": 0.4}
+        },
+        "bundler_profile_metrics": {"ranking_seconds_mean": {"mean_seconds": 0.2}},
+    }
+    metrics = module.scenario_mean_metrics(summary)
+    assert metrics["total_elapsed_seconds"] == 2.5
+    assert metrics["step:repo.refresh_index"] == 1.2
+    assert metrics["references:candidate_discovery_seconds_mean"] == 0.4
+    assert metrics["bundler:ranking_seconds_mean"] == 0.2
+
+
+def test_evaluate_regression_guardrails_detects_drift() -> None:
+    module = _load_benchmark_module()
+    current = {
+        "self": {
+            "total_elapsed_seconds": {"mean_seconds": 12.0},
+            "step_elapsed_seconds": {"repo.refresh_index": {"mean_seconds": 6.0}},
+            "references_profile_metrics": {},
+            "bundler_profile_metrics": {},
+        }
+    }
+    baseline = {
+        "self": {
+            "total_elapsed_seconds": {"mean_seconds": 10.0},
+            "step_elapsed_seconds": {"repo.refresh_index": {"mean_seconds": 4.0}},
+            "references_profile_metrics": {},
+            "bundler_profile_metrics": {},
+        }
+    }
+    warnings = module.evaluate_regression_guardrails(
+        current_summaries=current,
+        baseline_summaries=baseline,
+        threshold_percent=15.0,
+    )
+    assert len(warnings) == 2
+    assert warnings[0].scenario == "self"
+    assert warnings[0].delta_percent > 15.0
+
+
+def test_evaluate_regression_guardrails_ignores_below_threshold() -> None:
+    module = _load_benchmark_module()
+    current = {
+        "self": {
+            "total_elapsed_seconds": {"mean_seconds": 10.5},
+            "step_elapsed_seconds": {},
+            "references_profile_metrics": {},
+            "bundler_profile_metrics": {},
+        }
+    }
+    baseline = {
+        "self": {
+            "total_elapsed_seconds": {"mean_seconds": 10.0},
+            "step_elapsed_seconds": {},
+            "references_profile_metrics": {},
+            "bundler_profile_metrics": {},
+        }
+    }
+    warnings = module.evaluate_regression_guardrails(
+        current_summaries=current,
+        baseline_summaries=baseline,
+        threshold_percent=10.0,
+    )
+    assert warnings == []
+
+
+def test_load_baseline_summaries_reads_scenarios(tmp_path: Path) -> None:
+    module = _load_benchmark_module()
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "benchmark_version": 4,
+                "scenarios": {
+                    "self": {
+                        "total_elapsed_seconds": {"mean_seconds": 5.0},
+                        "step_elapsed_seconds": {},
+                        "references_profile_metrics": {},
+                        "bundler_profile_metrics": {},
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded = module.load_baseline_summaries(baseline_path)
+    assert "self" in loaded
+
+
+def test_load_baseline_summaries_requires_scenarios(tmp_path: Path) -> None:
+    module = _load_benchmark_module()
+    baseline_path = tmp_path / "bad_baseline.json"
+    baseline_path.write_text(json.dumps({"benchmark_version": 4}), encoding="utf-8")
+    try:
+        module.load_baseline_summaries(baseline_path)
+    except ValueError as exc:
+        assert "missing 'scenarios'" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for missing scenarios")
