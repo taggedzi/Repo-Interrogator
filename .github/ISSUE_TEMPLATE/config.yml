@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Issue triage guide
+    url: https://github.com/taggedzi/Repo-Interrogator/blob/main/docs/TRIAGE.md
+    about: Review labels, priorities, and maintainer triage workflow expectations.
   - name: Security vulnerability report
     url: https://github.com/taggedzi/Repo-Interrogator/security/advisories/new
     about: Please report security vulnerabilities privately.

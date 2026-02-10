@@ -118,6 +118,7 @@ Important limits:
 - Configuration and limits: `docs/CONFIG.md`
 - AI client integration (MCP over STDIO): `docs/AI_INTEGRATION.md`
 - Troubleshooting: `docs/TROUBLESHOOTING.md`
+- Issue labels and triage workflow: `docs/TRIAGE.md`
 - Security policy and vulnerability reporting: `SECURITY.md`
 - Security model and blocked behavior: `docs/SECURITY.md`
 - Release process: `docs/release.md`

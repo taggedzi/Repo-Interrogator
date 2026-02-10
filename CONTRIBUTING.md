@@ -74,6 +74,13 @@ Please include:
 
 Keep PRs focused and avoid unrelated refactors.
 
+## Issue Intake and Triage
+
+Issue labeling and backlog triage process is documented in:
+- `docs/TRIAGE.md`
+
+Please file issues with clear reproduction details so triage can stay fast and deterministic.
+
 ## Dependency Changes
 
 Dependency additions/replacements require explicit justification in the PR:
