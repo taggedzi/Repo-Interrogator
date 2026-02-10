@@ -57,7 +57,7 @@ For historical detail, see:
 
 ## Later
 
-- [ ] `DX-001` Add maintainership automation for changelog/release notes.
+- [x] `DX-001` Add maintainership automation for changelog/release notes.
 - [ ] `DX-002` Add issue labels/triage docs for single-maintainer workflow.
 
 ## Icebox

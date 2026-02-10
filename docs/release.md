@@ -1,6 +1,7 @@
 # Release Process
 
-This repository uses a tag-driven GitHub Actions release workflow.
+This repository uses a tag-driven GitHub Actions release workflow with deterministic
+release-notes generation.
 
 ## Standard release (GitHub artifacts only)
 
@@ -10,8 +11,34 @@ This repository uses a tag-driven GitHub Actions release workflow.
 3. The `Release` workflow will:
    - build `sdist` and `wheel`,
    - run artifact import smoke tests,
+   - generate deterministic release notes from git history range,
    - create/update GitHub Release,
    - upload `dist/*.tar.gz` and `dist/*.whl`.
+
+## Maintainer automation (changelog + notes)
+
+Generate release notes markdown locally:
+
+```bash
+.venv/bin/python scripts/generate_release_notes.py --repo-root . --print
+```
+
+Write release notes to a file:
+
+```bash
+.venv/bin/python scripts/generate_release_notes.py --repo-root . --output .repo_mcp/release_notes.md
+```
+
+Update `CHANGELOG.md` with a new version section:
+
+```bash
+.venv/bin/python scripts/generate_release_notes.py --repo-root . --version vX.Y.Z --update-changelog
+```
+
+Notes:
+- Default commit range is `latest_tag..HEAD` when tags are present.
+- Use `--from-ref` and `--to-ref` to override the range explicitly.
+- `--update-changelog` fails if the target version section already exists.
 
 ## Optional guarded PyPI publish
 
@@ -32,4 +59,3 @@ The workflow publishes with Twine only when guard conditions are met.
 
 - This project keeps enforcement CI-only (no pre-commit requirement).
 - Release artifacts are always attached to GitHub Releases for auditability.
-
