@@ -182,6 +182,15 @@ Priority:
 2. `repo_mcp.toml`
 3. CLI flags
 
+Recommended operator presets (non-binding guidance):
+
+* `small`: prioritize responsiveness for small repos or quick local loops.
+* `medium`: balanced default for most repositories.
+* `large`: favor broader recall for large/heterogeneous repos with higher latency tolerance.
+
+These preset names are documentation-level guidance only in v2.6.
+They do not add a new required runtime config key and must not change deterministic ordering rules.
+
 ---
 
 ## 9. Indexing
@@ -540,6 +549,31 @@ Bundle `audit` payload must include bounded deterministic ranking debug metadata
   * `definition_match`, `reference_count_in_range`, `min_definition_distance`
   * `path_name_relevance`, `search_score`, `range_size_penalty`
 
+#### `why_not_selected` summary (v2.6)
+
+Bundle `audit` payload may include bounded deterministic skip diagnostics at:
+
+* `selection_debug.why_not_selected_summary`
+
+Required shape:
+
+* `total_skipped_candidates` (int)
+* `reason_counts` (object with deterministic key order) with bounded known keys:
+  * `file_budget`
+  * `line_budget`
+  * `zero_lines`
+  * `other`
+* `top_skipped` (bounded list, deterministic order) with:
+  * `path`, `start_line`, `end_line`, `source_query`
+  * `reason` (one of the keys above)
+
+Bounds and determinism requirements:
+
+* `top_skipped` must be deterministically ordered with the same tie-break rules as candidate ranking, after applying skip-reason filtering.
+* `top_skipped` must be bounded (default maximum 20 entries).
+* Summary must not include file contents or sensitive material.
+* Summary is diagnostics-only and must not change candidate ranking or selection behavior.
+
 #### `why_selected` payload (v2.5)
 
 Each selected excerpt must include a bounded deterministic `why_selected` object with:
@@ -658,6 +692,7 @@ Benchmark protocol:
   * configurable drift threshold percent,
   * non-blocking warning emission in CLI and summary artifacts,
   * deterministic warning ordering (scenario then metric).
+* Recommended CI integration remains warning-only by default (non-blocking local/CI command path).
 
 Non-goals for baseline profiling:
 
@@ -717,6 +752,16 @@ Non-goals for baseline profiling:
 
 * Windows vs Linux path normalization
 * WSL compatibility
+
+### Documentation workflow recipes
+
+Project documentation must maintain deterministic, reproducible example workflows for:
+
+* bug investigation
+* refactor impact analysis
+* API/data-flow tracing
+
+Examples must reference live tool contracts and be covered by lightweight integration checks to prevent schema drift.
 
 ---
 
