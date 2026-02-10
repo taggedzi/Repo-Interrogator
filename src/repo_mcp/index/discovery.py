@@ -71,7 +71,11 @@ def record_map(records: list[FileRecord]) -> dict[str, FileRecord]:
 
 def should_exclude(relative_path: str, exclude_globs: tuple[str, ...]) -> bool:
     """Return True when a path matches configured ignore globs."""
-    return any(fnmatch.fnmatch(relative_path, pattern) for pattern in exclude_globs)
+    anchored = f"/{relative_path}"
+    return any(
+        fnmatch.fnmatch(relative_path, pattern) or fnmatch.fnmatch(anchored, pattern)
+        for pattern in exclude_globs
+    )
 
 
 def has_allowed_extension(relative_path: str, include_extensions: tuple[str, ...]) -> bool:

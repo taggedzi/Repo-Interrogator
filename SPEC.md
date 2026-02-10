@@ -165,6 +165,17 @@ Used for:
 * language adapter configuration
 * future hybrid search parameters
 
+Default exclude globs are deterministic and intended to avoid non-project noise:
+
+* VCS and internal state: `.git/`, `.repo_mcp/`
+* Python caches/tooling: `__pycache__/`, `.venv/`, `.mypy_cache/`, `.pytest_cache/`, `.ruff_cache/`, `.tox/`, `.nox/`
+* JavaScript/TypeScript tooling: `node_modules/`, `.pnpm-store/`, `.yarn/`, `.npm/`, `.next/`, `.nuxt/`, `.svelte-kit/`
+* JVM/IDE/editor artifacts: `.gradle/`, `.idea/`, `.vscode/`
+* Build/output/temp artifacts: `dist/`, `build/`, `target/`, `bin/`, `obj/`, `out/`, `coverage/`, `tmp/`, `temp/`
+* CI/workflow metadata: `.github/`
+
+These defaults may be overridden through `index.exclude_globs` in `repo_mcp.toml` when a repository intentionally stores source-of-truth content in these paths.
+
 Priority:
 
 1. defaults
@@ -180,8 +191,8 @@ Priority:
 Text-like files only:
 
 * Python: `.py`
+* v2.5 language adapters: `.ts`, `.tsx`, `.js`, `.jsx`, `.java`, `.go`, `.rs`, `.c`, `.h`, `.cc`, `.hh`, `.cpp`, `.hpp`, `.cxx`, `.cs`
 * Docs/config: `.md`, `.rst`, `.toml`, `.yaml`, `.yml`, `.json`, `.ini`, `.cfg`
-* Optional web: `.js`, `.ts`, `.html`, `.css`
 
 Binary files excluded by MIME/extension checks.
 
@@ -585,6 +596,7 @@ Notes:
 * output is deterministic and declaration-linked
 * no runtime branch evaluation is performed
 * Python uses AST-first extraction; other languages use lexical fallback in v2.5
+* when `path` is omitted, candidate files are selected using the same deterministic discovery filters as indexing (`index.include_extensions`, `index.exclude_globs`, binary exclusion), then evaluated by language adapters
 
 ---
 

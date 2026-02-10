@@ -99,3 +99,33 @@ def test_repo_references_tool_path_scope_and_truncation(tmp_path: Path) -> None:
     assert truncated["result"]["truncated"] is True
     assert truncated["result"]["total_candidates"] >= 2
     assert len(truncated["result"]["references"]) == 1
+
+
+def test_repo_references_skips_excluded_dirs_and_non_indexed_extensions(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / ".pytest_cache").mkdir()
+    (tmp_path / "src" / "api.ts").write_text(
+        "export class Api { run(): void {} }\nconst api = new Api();\napi.run();\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".pytest_cache" / "noise.ts").write_text(
+        "const api = new Api();\napi.run();\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "notes.txt").write_text(
+        "Api.run Api.run Api.run\n",
+        encoding="utf-8",
+    )
+    server = create_server(repo_root=str(tmp_path))
+
+    response = server.handle_payload(
+        {
+            "id": "req-ref-filter-1",
+            "method": "repo.references",
+            "params": {"symbol": "Api.run", "top_k": 50},
+        }
+    )
+
+    assert response["ok"] is True
+    paths = [item["path"] for item in response["result"]["references"]]
+    assert all(path == "src/api.ts" for path in paths)

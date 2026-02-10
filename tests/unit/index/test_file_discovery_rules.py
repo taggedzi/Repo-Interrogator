@@ -40,3 +40,17 @@ def test_discovery_excludes_binary_file_with_allowed_extension(tmp_path: Path) -
     )
     records = discover_files(tmp_path, config=config)
     assert [record.path for record in records] == ["src/ok.py"]
+
+
+def test_discovery_excludes_root_level_hidden_cache_dirs(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / ".pytest_cache").mkdir()
+    (tmp_path / "src" / "ok.ts").write_text("const x = 1;\n", encoding="utf-8")
+    (tmp_path / ".pytest_cache" / "noise.ts").write_text("const y = 2;\n", encoding="utf-8")
+
+    config = IndexConfig(
+        include_extensions=(".ts",),
+        exclude_globs=("**/.pytest_cache/**",),
+    )
+    records = discover_files(tmp_path, config=config)
+    assert [record.path for record in records] == ["src/ok.ts"]

@@ -38,6 +38,10 @@ Optional flags:
 - `--max-references`
 - `--python-adapter-enabled true|false`
 
+Default discovery excludes common non-source/cache/output directories (for example `.git`, `.github`, `.repo_mcp`, `__pycache__`, `.venv`, `.mypy_cache`, `.pytest_cache`, `.ruff_cache`, `node_modules`, `dist`, `build`, `target`).
+This reduces noise and improves retrieval latency for index/search/references.
+If your repo stores important content in excluded paths, adjust `index.exclude_globs` in `repo_mcp.toml`.
+
 Environment variables:
 - none required by this server
 
@@ -140,6 +144,7 @@ Interpretation notes:
 - Returns deterministic declaration-linked references with `strategy` + `confidence`.
 - Python uses `ast`; non-Python uses lexical fallback in v2.5.
 - Use `top_k` to bound payload size and `path` to scope to one file.
+- When `path` is omitted, candidate files are selected using the same discovery filters as indexing (`include_extensions` + `exclude_globs` + binary exclusion).
 
 `repo.build_context_bundle` v2.5 explainability notes:
 - Each selection includes `why_selected` with signal and score component details.

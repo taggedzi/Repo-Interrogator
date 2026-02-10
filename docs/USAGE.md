@@ -29,6 +29,19 @@ Optional startup overrides:
 - `--max-references`
 - `--python-adapter-enabled true|false`
 
+## Default Discovery Filters
+
+By default, index and cross-file references skip common non-project/cache/output folders, including:
+
+- `.git`, `.github`, `.repo_mcp`
+- `__pycache__`, `.venv`, `.mypy_cache`, `.pytest_cache`, `.ruff_cache`, `.tox`, `.nox`
+- `node_modules`, `.pnpm-store`, `.yarn`, `.npm`, `.next`, `.nuxt`, `.svelte-kit`
+- `.gradle`, `.idea`, `.vscode`
+- `dist`, `build`, `target`, `bin`, `obj`, `out`, `coverage`, `tmp`, `temp`
+
+This keeps retrieval focused on repository source/config content rather than language/tooling support artifacts.
+If your repository intentionally stores source-of-truth files in excluded paths, override with `index.exclude_globs` in `repo_mcp.toml`.
+
 ## Request Shapes
 
 The server accepts either of these request styles.

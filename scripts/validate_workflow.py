@@ -52,7 +52,8 @@ class WorkflowValidator:
             self._step_refresh()
             search_response = self._step_search()
             opened_path = self._step_open(search_response)
-            self._step_outline(opened_path)
+            symbol = self._step_outline(opened_path)
+            self._step_references(symbol)
             self._step_bundle()
             self._step_audit()
         except Exception as error:  # pragma: no cover
@@ -88,7 +89,7 @@ class WorkflowValidator:
             cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
             text=True,
         )
 
@@ -125,10 +126,7 @@ class WorkflowValidator:
             )
         line = self.proc.stdout.readline()
         if not line:
-            stderr_out = ""
-            if self.proc.stderr is not None:
-                stderr_out = self.proc.stderr.read()
-            raise RuntimeError(f"No response from server. stderr={stderr_out}")
+            raise RuntimeError("No response from server.")
         response = json.loads(line)
         print(f"<<< {json.dumps(response, sort_keys=True)}")
         return response
@@ -198,12 +196,30 @@ class WorkflowValidator:
         self._assert_true(
             "status.fields",
             isinstance(result, dict)
-            and {"repo_root", "index_status", "limits_summary", "effective_config"}.issubset(
+            and {
+                "repo_root",
+                "index_status",
+                "limits_summary",
+                "effective_config",
+            }.issubset(
                 set(result.keys())
             ),
             "repo.status should include core fields.",
             expected="result contains repo_root/index_status/limits_summary/effective_config",
             actual=self._result_keys(result),
+        )
+        limits_summary = result.get("limits_summary", {})
+        limits_summary_keys = (
+            sorted(limits_summary.keys())
+            if isinstance(limits_summary, dict)
+            else type(limits_summary).__name__
+        )
+        self._assert_true(
+            "status.max_references_limit",
+            isinstance(limits_summary, dict) and "max_references" in limits_summary,
+            "repo.status limits_summary should include max_references.",
+            expected="limits_summary has max_references",
+            actual=f"limits_summary keys={limits_summary_keys}",
         )
 
     def _step_refresh(self) -> None:
@@ -305,7 +321,7 @@ class WorkflowValidator:
         )
         return path
 
-    def _step_outline(self, opened_path: str) -> None:
+    def _step_outline(self, opened_path: str) -> str:
         outline_target = opened_path if opened_path.endswith(".py") else "src/repo_mcp/server.py"
         req_id = "wf-5-outline"
         response = self._call(
@@ -389,9 +405,133 @@ class WorkflowValidator:
             expected="class-scope symbols have non-null parent_symbol",
             actual=f"missing_parent_count={missing_parent_for_class_scope}",
         )
+        chosen_symbol = "StdioServer.handle_payload"
+        if isinstance(symbols, list):
+            preferred_symbols = (
+                "StdioServer.handle_payload",
+                "StdioServer.parse_request",
+                "StdioServer.handle_json_line",
+                "StdioServer.serve",
+            )
+            available_symbols = {
+                symbol.get("name")
+                for symbol in symbols
+                if isinstance(symbol, dict) and isinstance(symbol.get("name"), str)
+            }
+            for preferred in preferred_symbols:
+                if preferred in available_symbols:
+                    return preferred
+            fallback_symbol: str | None = None
+            for symbol in symbols:
+                if not isinstance(symbol, dict):
+                    continue
+                name = symbol.get("name")
+                if isinstance(name, str) and name.strip():
+                    if "." in name:
+                        chosen_symbol = name
+                        break
+                    if fallback_symbol is None:
+                        fallback_symbol = name
+            if chosen_symbol == "StdioServer.handle_payload" and fallback_symbol:
+                chosen_symbol = fallback_symbol
+        return chosen_symbol
+
+    def _step_references(self, symbol: str) -> None:
+        req_id_first = "wf-6-references-1"
+        req_id_second = "wf-6-references-2"
+        first = self._call(
+            {
+                "id": req_id_first,
+                "method": "repo.references",
+                "params": {
+                    "symbol": symbol,
+                    "path_scope": "src/repo_mcp/server.py",
+                    "top_k": 10,
+                },
+            }
+        )
+        second = self._call(
+            {
+                "id": req_id_second,
+                "method": "repo.references",
+                "params": {
+                    "symbol": symbol,
+                    "path_scope": "src/repo_mcp/server.py",
+                    "top_k": 10,
+                },
+            }
+        )
+        self._validate_envelope(req_id_first, first, "references.envelope.first")
+        self._validate_envelope(req_id_second, second, "references.envelope.second")
+        self._assert_true(
+            "references.ok.first",
+            first.get("ok") is True,
+            "First repo.references call should return ok=true.",
+            expected="ok=true",
+            actual=f"ok={first.get('ok')}",
+        )
+        self._assert_true(
+            "references.ok.second",
+            second.get("ok") is True,
+            "Second repo.references call should return ok=true.",
+            expected="ok=true",
+            actual=f"ok={second.get('ok')}",
+        )
+        first_result = first.get("result", {})
+        second_result = second.get("result", {})
+        self._assert_true(
+            "references.fields",
+            isinstance(first_result, dict)
+            and {"symbol", "references", "truncated", "total_candidates"}.issubset(
+                set(first_result.keys())
+            ),
+            "repo.references should include required result fields.",
+            expected="result has symbol/references/truncated/total_candidates",
+            actual=self._result_keys(first_result),
+        )
+        self._assert_true(
+            "references.deterministic",
+            first_result == second_result,
+            "repo.references repeated calls should be deterministic.",
+            expected="first result equals second result",
+            actual="results differ" if first_result != second_result else "results equal",
+        )
+        references = first_result.get("references", [])
+        self._assert_true(
+            "references.list_type",
+            isinstance(references, list),
+            "repo.references result.references should be a list.",
+            expected="references is list",
+            actual=f"references type={type(references).__name__}",
+        )
+        if isinstance(references, list) and references:
+            sample = references[0]
+            sample_keys = (
+                sorted(sample.keys())
+                if isinstance(sample, dict)
+                else type(sample).__name__
+            )
+            self._assert_true(
+                "references.record_shape",
+                isinstance(sample, dict)
+                and {
+                    "symbol",
+                    "path",
+                    "line",
+                    "kind",
+                    "evidence",
+                    "strategy",
+                    "confidence",
+                }.issubset(set(sample.keys())),
+                "repo.references records should include contract fields.",
+                expected=(
+                    "reference has symbol/path/line/kind/evidence/strategy/confidence"
+                ),
+                actual=f"sample keys={sample_keys}",
+            )
 
     def _step_bundle(self) -> None:
-        req_id = "wf-6-bundle"
+        req_id = "wf-7-bundle"
         response = self._call(
             {
                 "id": req_id,
@@ -430,9 +570,111 @@ class WorkflowValidator:
             expected=f"result has {sorted(expected_keys)}",
             actual=self._result_keys(result),
         )
+        selections = result.get("selections", [])
+        self._assert_true(
+            "bundle.selections_type",
+            isinstance(selections, list),
+            "Bundle selections should be a list.",
+            expected="selections is list",
+            actual=f"selections type={type(selections).__name__}",
+        )
+        if isinstance(selections, list) and selections:
+            first = selections[0]
+            why_selected = first.get("why_selected") if isinstance(first, dict) else None
+            self._assert_true(
+                "bundle.why_selected_shape",
+                isinstance(why_selected, dict)
+                and {
+                    "matched_signals",
+                    "score_components",
+                    "source_query",
+                    "matched_terms",
+                    "symbol_reference",
+                }.issubset(set(why_selected.keys())),
+                "Bundle selections should include v2.5 why_selected fields.",
+                expected=(
+                    "why_selected has matched_signals/score_components/source_query/"
+                    "matched_terms/symbol_reference"
+                ),
+                actual=f"why_selected={type(why_selected).__name__}",
+            )
+            score_components = (
+                why_selected.get("score_components")
+                if isinstance(why_selected, dict)
+                else None
+            )
+            self._assert_true(
+                "bundle.score_components_shape",
+                isinstance(score_components, dict)
+                and {
+                    "search_score",
+                    "definition_match",
+                    "reference_count_in_range",
+                    "min_definition_distance",
+                    "path_name_relevance",
+                    "range_size_penalty",
+                }.issubset(set(score_components.keys())),
+                "Bundle why_selected.score_components should include ranking signals.",
+                expected=(
+                    "score_components has search_score/definition_match/"
+                    "reference_count_in_range/min_definition_distance/"
+                    "path_name_relevance/range_size_penalty"
+                ),
+                actual=f"score_components={type(score_components).__name__}",
+            )
+        audit = result.get("audit", {})
+        ranking_debug = audit.get("ranking_debug") if isinstance(audit, dict) else None
+        self._assert_true(
+            "bundle.ranking_debug_shape",
+            isinstance(ranking_debug, dict)
+            and {
+                "candidate_count",
+                "definition_match_count",
+                "reference_proximity_count",
+                "top_candidates",
+            }.issubset(set(ranking_debug.keys())),
+            "Bundle audit should include ranking_debug explainability fields.",
+            expected=(
+                "ranking_debug has candidate_count/definition_match_count/"
+                "reference_proximity_count/top_candidates"
+            ),
+            actual=f"ranking_debug={type(ranking_debug).__name__}",
+        )
+        if isinstance(ranking_debug, dict):
+            top_candidates = ranking_debug.get("top_candidates")
+            self._assert_true(
+                "bundle.ranking_debug_top_candidates_type",
+                isinstance(top_candidates, list),
+                "Bundle audit.ranking_debug.top_candidates should be a list.",
+                expected="top_candidates is list",
+                actual=f"top_candidates type={type(top_candidates).__name__}",
+            )
+            if isinstance(top_candidates, list) and top_candidates:
+                sample = top_candidates[0]
+                self._assert_true(
+                    "bundle.ranking_debug_candidate_shape",
+                    isinstance(sample, dict)
+                    and {
+                        "path",
+                        "start_line",
+                        "end_line",
+                        "source_query",
+                        "selected",
+                        "rank_position",
+                        "definition_match",
+                        "reference_count_in_range",
+                        "min_definition_distance",
+                        "path_name_relevance",
+                        "search_score",
+                        "range_size_penalty",
+                    }.issubset(set(sample.keys())),
+                    "ranking_debug top candidate entries should include debug contract fields.",
+                    expected="top candidate has ranking debug keys",
+                    actual=f"sample={type(sample).__name__}",
+                )
 
     def _step_audit(self) -> None:
-        req_id = "wf-7-audit"
+        req_id = "wf-8-audit"
         response = self._call({"id": req_id, "method": "repo.audit_log", "params": {"limit": 50}})
         self._validate_envelope(req_id, response, "audit.envelope")
         entries = response.get("result", {}).get("entries", [])
@@ -456,6 +698,7 @@ class WorkflowValidator:
             "repo.search",
             "repo.open_file",
             "repo.outline",
+            "repo.references",
             "repo.build_context_bundle",
         }
         seen_tools = set()

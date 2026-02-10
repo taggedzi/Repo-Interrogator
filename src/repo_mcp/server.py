@@ -19,7 +19,7 @@ from repo_mcp.adapters.base import (
 )
 from repo_mcp.bundler import BundleBudget, BundleResult, build_context_bundle
 from repo_mcp.config import CliOverrides, ServerConfig, load_effective_config
-from repo_mcp.index import IndexManager, IndexSchemaUnsupportedError
+from repo_mcp.index import IndexManager, IndexSchemaUnsupportedError, discover_files
 from repo_mcp.logging import AuditEvent, JsonlAuditLogger, sanitize_arguments, utc_timestamp
 from repo_mcp.security import (
     PathBlockedError,
@@ -574,11 +574,9 @@ class StdioServer:
             return [(relative, text)]
 
         files: list[tuple[str, str]] = []
-        for candidate in sorted(self._repo_root.rglob("*")):
-            if not candidate.is_file():
-                continue
-            if candidate.is_relative_to(self._data_dir):
-                continue
+        records = discover_files(self._repo_root, self._config.index)
+        for record in records:
+            candidate = self._repo_root / record.path
             try:
                 enforce_file_access_policy(
                     repo_root=self._repo_root,
@@ -587,9 +585,8 @@ class StdioServer:
                 )
             except PolicyBlockedError:
                 continue
-            relative = candidate.relative_to(self._repo_root).as_posix()
             text = candidate.read_text(encoding="utf-8", errors="replace")
-            files.append((relative, text))
+            files.append((record.path, text))
         return files
 
     def _collect_symbol_references(
