@@ -10,7 +10,7 @@ on:
       run_perf_guardrails:
         description: "Run optional warning-only perf drift guardrails"
         required: false
-        default: true
+        default: false
         type: boolean
 
 jobs:
