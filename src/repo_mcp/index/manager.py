@@ -48,6 +48,8 @@ class IndexManager:
         self._files_path = self._index_dir / "files.jsonl"
         self._chunks_path = self._index_dir / "chunks.jsonl"
         self._data_dir_prefix = self._compute_data_dir_prefix()
+        self._search_docs_cache_marker: str | None = None
+        self._search_docs_cache: list[SearchDocument] | None = None
 
     def status(self) -> IndexStatus:
         """Return status derived from manifest, if present."""
@@ -130,14 +132,21 @@ class IndexManager:
         """Run deterministic BM25 search over indexed chunks."""
         if top_k < 1:
             return []
-        chunks = self._load_chunks()
-        filtered = self._filter_chunks(chunks, file_glob=file_glob, path_prefix=path_prefix)
+        docs = self._load_search_documents()
+        filtered = self._filter_search_documents(docs, file_glob=file_glob, path_prefix=path_prefix)
         if not filtered:
             return []
+        return bm25_search(documents=filtered, query=query, top_k=top_k)
 
+    def _load_search_documents(self) -> list[SearchDocument]:
+        marker = self._search_cache_marker()
+        if self._search_docs_cache is not None and self._search_docs_cache_marker == marker:
+            return self._search_docs_cache
+
+        chunks = self._load_chunks()
         line_cache: dict[str, list[str]] = {}
         docs: list[SearchDocument] = []
-        for chunk in filtered:
+        for chunk in chunks:
             lines = line_cache.get(chunk.path)
             if lines is None:
                 path = self._repo_root / chunk.path
@@ -156,7 +165,23 @@ class IndexManager:
                     text=text,
                 )
             )
-        return bm25_search(documents=docs, query=query, top_k=top_k)
+
+        self._search_docs_cache = docs
+        self._search_docs_cache_marker = marker
+        return docs
+
+    def _search_cache_marker(self) -> str:
+        manifest = self._read_manifest()
+        if manifest is None:
+            return "not_indexed"
+        schema = manifest.get("schema_version")
+        indexed_file_count = manifest.get("indexed_file_count")
+        indexed_chunk_count = manifest.get("indexed_chunk_count")
+        refresh_timestamp = manifest.get("last_refresh_timestamp")
+        return (
+            f"{schema}:{indexed_file_count}:{indexed_chunk_count}:"
+            f"{refresh_timestamp if isinstance(refresh_timestamp, str) else ''}"
+        )
 
     def _build_chunks(self, records: list[FileRecord]) -> list[ChunkRecord]:
         chunks: list[ChunkRecord] = []
@@ -218,6 +243,22 @@ class IndexManager:
             if normalized_prefix is not None and not chunk.path.startswith(normalized_prefix):
                 continue
             output.append(chunk)
+        return output
+
+    @staticmethod
+    def _filter_search_documents(
+        documents: list[SearchDocument],
+        file_glob: str | None,
+        path_prefix: str | None,
+    ) -> list[SearchDocument]:
+        output: list[SearchDocument] = []
+        normalized_prefix = _normalize_path_prefix(path_prefix)
+        for doc in documents:
+            if file_glob is not None and not fnmatch.fnmatch(doc.path, file_glob):
+                continue
+            if normalized_prefix is not None and not doc.path.startswith(normalized_prefix):
+                continue
+            output.append(doc)
         return output
 
     def _filter_internal_records(self, records: list[FileRecord]) -> list[FileRecord]:
