@@ -105,8 +105,14 @@ def build_context_bundle(
     prompt_terms = tuple(tokenize(prompt))
     raw_hits: list[_Hit] = []
     symbol_cache: dict[str, tuple[_SymbolRange, ...]] = {}
-    for query in queries:
-        for hit in search_fn(query=query, top_k=top_k_per_query):
+    for query_index, query in enumerate(queries):
+        for hit in search_fn(
+            query=query,
+            top_k=_query_top_k(
+                query_index=query_index,
+                base_top_k=top_k_per_query,
+            ),
+        ):
             candidate = _candidate_from_hit(hit, source_query=query)
             if candidate is None:
                 continue
@@ -199,6 +205,14 @@ def build_context_bundle(
 def _build_queries(prompt: str) -> list[str]:
     keywords = _extract_keywords(prompt)
     return [prompt, *keywords]
+
+
+def _query_top_k(*, query_index: int, base_top_k: int) -> int:
+    """Return deterministic retrieval budget per query for candidate control."""
+    if query_index <= 0:
+        return max(1, base_top_k)
+    keyword_top_k = max(5, base_top_k // 4)
+    return min(max(1, base_top_k), keyword_top_k)
 
 
 def _extract_keywords(prompt: str) -> list[str]:
