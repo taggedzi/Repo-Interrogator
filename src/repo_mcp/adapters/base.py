@@ -22,6 +22,19 @@ class OutlineSymbol:
     decl_context: str | None = None
 
 
+@dataclass(slots=True, frozen=True)
+class SymbolReference:
+    """Single cross-file symbol reference record."""
+
+    symbol: str
+    path: str
+    line: int
+    kind: str
+    evidence: str
+    strategy: str
+    confidence: str
+
+
 class AdapterContractError(ValueError):
     """Raised when adapter output violates the shared symbol contract."""
 
@@ -69,11 +82,55 @@ def validate_outline_symbols(symbols: list[OutlineSymbol]) -> None:
             )
 
 
+def reference_sort_key(reference: SymbolReference) -> tuple[str, int, str, str]:
+    """Return deterministic sort key for symbol references."""
+    return (reference.path, reference.line, reference.symbol, reference.kind)
+
+
+def validate_symbol_references(references: list[SymbolReference]) -> None:
+    """Validate references against required invariant fields."""
+    allowed_confidence = {"high", "medium", "low"}
+    allowed_strategy = {"ast", "lexical"}
+    for reference in references:
+        if not reference.symbol.strip():
+            raise AdapterContractError("Symbol reference symbol must be non-empty.")
+        if not reference.path.strip():
+            raise AdapterContractError("Symbol reference path must be non-empty.")
+        if reference.line < 1:
+            raise AdapterContractError("Symbol reference line must be >= 1.")
+        if not reference.kind.strip():
+            raise AdapterContractError("Symbol reference kind must be non-empty.")
+        if not reference.evidence.strip():
+            raise AdapterContractError("Symbol reference evidence must be non-empty.")
+        if reference.strategy not in allowed_strategy:
+            raise AdapterContractError("Symbol reference strategy must be one of ast, lexical.")
+        if reference.confidence not in allowed_confidence:
+            raise AdapterContractError("Symbol reference confidence must be high, medium, or low.")
+
+
 def normalize_and_sort_symbols(symbols: list[OutlineSymbol]) -> list[OutlineSymbol]:
     """Normalize signatures, validate schema invariants, and sort deterministically."""
     normalized = [_normalize_symbol(symbol) for symbol in symbols]
     validate_outline_symbols(normalized)
     return sorted(normalized, key=symbol_sort_key)
+
+
+def normalize_and_sort_references(references: list[SymbolReference]) -> list[SymbolReference]:
+    """Validate schema invariants and sort references deterministically."""
+    normalized = [
+        replace(
+            reference,
+            symbol=normalize_optional_text(reference.symbol) or "",
+            path=normalize_optional_text(reference.path) or "",
+            kind=normalize_optional_text(reference.kind) or "",
+            evidence=normalize_optional_text(reference.evidence) or "",
+            strategy=normalize_optional_text(reference.strategy) or "",
+            confidence=normalize_optional_text(reference.confidence) or "",
+        )
+        for reference in references
+    ]
+    validate_symbol_references(normalized)
+    return sorted(normalized, key=reference_sort_key)
 
 
 def _normalize_symbol(symbol: OutlineSymbol) -> OutlineSymbol:

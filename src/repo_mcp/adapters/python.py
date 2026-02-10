@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import ast
 
-from repo_mcp.adapters.base import OutlineSymbol, normalize_and_sort_symbols, normalize_signature
+from repo_mcp.adapters.base import (
+    OutlineSymbol,
+    SymbolReference,
+    normalize_and_sort_references,
+    normalize_and_sort_symbols,
+    normalize_signature,
+)
 
 
 class PythonAstAdapter:
@@ -38,6 +44,41 @@ class PythonAstAdapter:
         """Python v1 does not derive symbol hints from prompt."""
         _ = prompt
         return ()
+
+    def references_for_symbol(
+        self,
+        symbol: str,
+        files: list[tuple[str, str]],
+        *,
+        top_k: int | None = None,
+    ) -> list[SymbolReference]:
+        """Return deterministic usage references for one symbol across Python files."""
+        if not symbol.strip():
+            return []
+
+        short_symbol = symbol.rsplit(".", 1)[-1]
+        references: list[SymbolReference] = []
+        for path, text in files:
+            if not self.supports_path(path):
+                continue
+            try:
+                tree = ast.parse(text)
+            except (SyntaxError, ValueError):
+                continue
+            file_collector = _PythonReferenceCollector()
+            file_collector.visit(tree)
+            references.extend(
+                _match_references(
+                    path=path,
+                    symbol=symbol,
+                    short_symbol=short_symbol,
+                    candidates=file_collector.candidates,
+                )
+            )
+        sorted_references = normalize_and_sort_references(references)
+        if top_k is None or top_k < 1:
+            return sorted_references
+        return sorted_references[:top_k]
 
 
 def _doc_first_line(
@@ -178,3 +219,94 @@ def _class_signature(node: ast.ClassDef) -> str | None:
     if not parts:
         return "()"
     return normalize_signature(f"({', '.join(parts)})")
+
+
+class _PythonReferenceCollector(ast.NodeVisitor):
+    """Collect Python usage candidates that can map to symbol references."""
+
+    def __init__(self) -> None:
+        self.candidates: list[tuple[int, str, str, str, str]] = []
+
+    def visit_Import(self, node: ast.Import) -> None:  # noqa: N802
+        for alias in node.names:
+            symbol = alias.name
+            evidence = f"import {symbol}"
+            self.candidates.append((node.lineno, symbol, "import", evidence, "high"))
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
+        module = node.module or ""
+        for alias in node.names:
+            if alias.name == "*":
+                continue
+            joined = f"{module}.{alias.name}".strip(".")
+            evidence = f"from {module or '.'} import {alias.name}"
+            self.candidates.append((node.lineno, joined, "import", evidence, "high"))
+        self.generic_visit(node)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:  # noqa: N802
+        for base in node.bases:
+            dotted = _dotted_name(base)
+            if dotted is None:
+                continue
+            evidence = f"class {node.name}({dotted})"
+            self.candidates.append((node.lineno, dotted, "inheritance", evidence, "high"))
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+        dotted = _dotted_name(node.func)
+        if dotted is not None:
+            last = dotted.rsplit(".", 1)[-1]
+            kind = "instantiation" if last[:1].isupper() else "call"
+            confidence = "high" if "." in dotted else "medium"
+            evidence = f"{dotted}()"
+            self.candidates.append((node.lineno, dotted, kind, evidence, confidence))
+        self.generic_visit(node)
+
+
+def _match_references(
+    path: str,
+    symbol: str,
+    short_symbol: str,
+    candidates: list[tuple[int, str, str, str, str]],
+) -> list[SymbolReference]:
+    references: list[SymbolReference] = []
+    for line, candidate, kind, evidence, confidence in candidates:
+        if not _candidate_matches_symbol(candidate, symbol, short_symbol):
+            continue
+        adjusted_confidence = confidence
+        if candidate != symbol and candidate.endswith(f".{short_symbol}"):
+            adjusted_confidence = "medium"
+        references.append(
+            SymbolReference(
+                symbol=symbol,
+                path=path,
+                line=line,
+                kind=kind,
+                evidence=evidence,
+                strategy="ast",
+                confidence=adjusted_confidence,
+            )
+        )
+    return references
+
+
+def _candidate_matches_symbol(candidate: str, symbol: str, short_symbol: str) -> bool:
+    if candidate == symbol:
+        return True
+    if candidate == short_symbol:
+        return True
+    return candidate.endswith(f".{short_symbol}")
+
+
+def _dotted_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = _dotted_name(node.value)
+        if parent is None:
+            return None
+        return f"{parent}.{node.attr}"
+    if isinstance(node, ast.Call):
+        return _dotted_name(node.func)
+    return None
