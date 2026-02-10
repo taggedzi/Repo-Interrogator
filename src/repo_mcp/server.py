@@ -12,7 +12,7 @@ import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TextIO
+from typing import TextIO, TypedDict, cast
 
 from repo_mcp.adapters import AdapterRegistry, build_adapter_registry
 from repo_mcp.adapters.base import (
@@ -21,6 +21,11 @@ from repo_mcp.adapters.base import (
     normalize_and_sort_symbols,
 )
 from repo_mcp.bundler import BundleBudget, BundleResult, build_context_bundle
+from repo_mcp.bundler.engine import (
+    ReferenceLookupFn,
+    ReferenceLookupManyFn,
+    ReferenceLookupScopedManyFn,
+)
 from repo_mcp.config import CliOverrides, ServerConfig, load_effective_config
 from repo_mcp.index import IndexManager, IndexSchemaUnsupportedError, discover_files
 from repo_mcp.logging import AuditEvent, JsonlAuditLogger, sanitize_arguments, utc_timestamp
@@ -41,6 +46,16 @@ class Request:
     request_id: str
     method: str
     params: dict[str, object]
+
+
+class _AdapterProfileBucket(TypedDict):
+    """Deterministic numeric counters for adapter reference profiling."""
+
+    paths: int
+    select_seconds: float
+    resolver_calls: int
+    resolver_seconds: float
+    resolver_failures: int
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -512,15 +527,24 @@ class StdioServer:
                 message="repo.build_context_bundle include_tests must be boolean.",
             )
 
+        reference_lookup_fn = cast(ReferenceLookupFn, self._bundle_reference_lookup())
+        reference_lookup_many_fn = cast(
+            ReferenceLookupManyFn,
+            self._bundle_reference_lookup_many(),
+        )
+        reference_lookup_scoped_many_fn = cast(
+            ReferenceLookupScopedManyFn,
+            self._bundle_reference_lookup_many_scoped(),
+        )
         result = build_context_bundle(
             prompt=prompt,
             budget=BundleBudget(max_files=max_files, max_total_lines=max_total_lines),
             search_fn=self._index_manager.search,
             read_lines_fn=self._read_repo_lines,
             outline_fn=self._bundle_outline_symbols,
-            reference_lookup_fn=self._bundle_reference_lookup(),
-            reference_lookup_many_fn=self._bundle_reference_lookup_many(),
-            reference_lookup_scoped_many_fn=self._bundle_reference_lookup_many_scoped(),
+            reference_lookup_fn=reference_lookup_fn,
+            reference_lookup_many_fn=reference_lookup_many_fn,
+            reference_lookup_scoped_many_fn=reference_lookup_scoped_many_fn,
             include_tests=include_tests,
             strategy="hybrid",
             top_k_per_query=self._limits.max_search_hits,
@@ -720,11 +744,11 @@ class StdioServer:
                 "normalize_sort_seconds": normalize_elapsed,
                 "adapters": {
                     name: {
-                        "paths": int(values["paths"]),
-                        "select_seconds": float(values["select_seconds"]),
-                        "resolver_calls": int(values["resolver_calls"]),
-                        "resolver_seconds": float(values["resolver_seconds"]),
-                        "resolver_failures": int(values["resolver_failures"]),
+                        "paths": values["paths"],
+                        "select_seconds": values["select_seconds"],
+                        "resolver_calls": values["resolver_calls"],
+                        "resolver_seconds": values["resolver_seconds"],
+                        "resolver_failures": values["resolver_failures"],
                     }
                     for name, values in sorted(adapter_stats.items())
                 },
@@ -754,11 +778,11 @@ class StdioServer:
         self,
         files: list[tuple[str, str]],
     ) -> tuple[
-        dict[str, tuple[object, list[tuple[str, str]]]], float, dict[str, dict[str, object]]
+        dict[str, tuple[object, list[tuple[str, str]]]], float, dict[str, _AdapterProfileBucket]
     ]:
         grouped: dict[str, tuple[object, list[tuple[str, str]]]] = {}
         select_seconds = 0.0
-        adapter_stats: dict[str, dict[str, object]] = {}
+        adapter_stats: dict[str, _AdapterProfileBucket] = {}
         for path, text in sorted(files, key=lambda item: item[0]):
             select_started = time.perf_counter()
             adapter = self._adapters.select(path)
@@ -774,10 +798,8 @@ class StdioServer:
                     "resolver_failures": 0,
                 },
             )
-            adapter_bucket["paths"] = int(adapter_bucket["paths"]) + 1
-            adapter_bucket["select_seconds"] = (
-                float(adapter_bucket["select_seconds"]) + select_elapsed
-            )
+            adapter_bucket["paths"] += 1
+            adapter_bucket["select_seconds"] += select_elapsed
             grouped_entry = grouped.get(adapter.name)
             if grouped_entry is None:
                 grouped[adapter.name] = (adapter, [(path, text)])
@@ -790,7 +812,7 @@ class StdioServer:
         *,
         symbols: list[str],
         grouped: dict[str, tuple[object, list[tuple[str, str]]]],
-        adapter_stats: dict[str, dict[str, object]],
+        adapter_stats: dict[str, _AdapterProfileBucket],
     ) -> tuple[dict[str, list[SymbolReference]], float, int]:
         references_by_symbol: dict[str, list[SymbolReference]] = {symbol: [] for symbol in symbols}
         resolver_seconds = 0.0
@@ -808,20 +830,14 @@ class StdioServer:
                     resolver_elapsed = time.perf_counter() - resolver_started
                     resolver_seconds += resolver_elapsed
                     resolver_failures += 1
-                    adapter_bucket["resolver_calls"] = int(adapter_bucket["resolver_calls"]) + 1
-                    adapter_bucket["resolver_seconds"] = (
-                        float(adapter_bucket["resolver_seconds"]) + resolver_elapsed
-                    )
-                    adapter_bucket["resolver_failures"] = (
-                        int(adapter_bucket["resolver_failures"]) + 1
-                    )
+                    adapter_bucket["resolver_calls"] += 1
+                    adapter_bucket["resolver_seconds"] += resolver_elapsed
+                    adapter_bucket["resolver_failures"] += 1
                     continue
                 resolver_elapsed = time.perf_counter() - resolver_started
                 resolver_seconds += resolver_elapsed
-                adapter_bucket["resolver_calls"] = int(adapter_bucket["resolver_calls"]) + 1
-                adapter_bucket["resolver_seconds"] = (
-                    float(adapter_bucket["resolver_seconds"]) + resolver_elapsed
-                )
+                adapter_bucket["resolver_calls"] += 1
+                adapter_bucket["resolver_seconds"] += resolver_elapsed
                 if isinstance(resolved_many, dict):
                     for symbol in symbols:
                         references = resolved_many.get(symbol, [])
@@ -838,20 +854,14 @@ class StdioServer:
                     resolver_elapsed = time.perf_counter() - resolver_started
                     resolver_seconds += resolver_elapsed
                     resolver_failures += 1
-                    adapter_bucket["resolver_calls"] = int(adapter_bucket["resolver_calls"]) + 1
-                    adapter_bucket["resolver_seconds"] = (
-                        float(adapter_bucket["resolver_seconds"]) + resolver_elapsed
-                    )
-                    adapter_bucket["resolver_failures"] = (
-                        int(adapter_bucket["resolver_failures"]) + 1
-                    )
+                    adapter_bucket["resolver_calls"] += 1
+                    adapter_bucket["resolver_seconds"] += resolver_elapsed
+                    adapter_bucket["resolver_failures"] += 1
                     continue
                 resolver_elapsed = time.perf_counter() - resolver_started
                 resolver_seconds += resolver_elapsed
-                adapter_bucket["resolver_calls"] = int(adapter_bucket["resolver_calls"]) + 1
-                adapter_bucket["resolver_seconds"] = (
-                    float(adapter_bucket["resolver_seconds"]) + resolver_elapsed
-                )
+                adapter_bucket["resolver_calls"] += 1
+                adapter_bucket["resolver_seconds"] += resolver_elapsed
                 references_by_symbol[symbol].extend(resolved)
         return references_by_symbol, resolver_seconds, resolver_failures
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import time
 from bisect import bisect_left, bisect_right
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, replace
 from typing import Protocol
 
@@ -60,7 +61,10 @@ class ReferenceLookupFn(Protocol):
 class ReferenceLookupManyFn(Protocol):
     """Batch reference lookup callback for deterministic ranking signals."""
 
-    def __call__(self, symbols: list[str]) -> dict[str, list[object] | tuple[tuple[str, int], ...]]:
+    def __call__(
+        self,
+        symbols: list[str],
+    ) -> dict[str, Sequence[object] | tuple[tuple[str, int], ...]]:
         """Return declaration-linked reference records grouped by symbol."""
 
 
@@ -70,7 +74,7 @@ class ReferenceLookupScopedManyFn(Protocol):
     def __call__(
         self,
         symbol_paths: dict[str, tuple[str, ...]],
-    ) -> dict[str, list[object] | tuple[tuple[str, int], ...]]:
+    ) -> dict[str, Sequence[object] | tuple[tuple[str, int], ...]]:
         """Return declaration-linked reference records grouped by symbol."""
 
 
@@ -380,24 +384,24 @@ def _prefetch_reference_pairs(
             )
             symbol_paths[symbol] = tuple(paths)
         grouped = reference_lookup_scoped_many_fn(symbol_paths)
-        cache: dict[str, _ReferenceLineIndex] = {}
+        scoped_cache: dict[str, _ReferenceLineIndex] = {}
         for symbol in symbols:
             payload = grouped.get(symbol, [])
-            cache[symbol] = _build_reference_line_index(payload)
-        return cache
+            scoped_cache[symbol] = _build_reference_line_index(payload)
+        return scoped_cache
     if reference_lookup_many_fn is not None:
         grouped = reference_lookup_many_fn(symbols)
-        cache: dict[str, _ReferenceLineIndex] = {}
+        many_cache: dict[str, _ReferenceLineIndex] = {}
         for symbol in symbols:
             payload = grouped.get(symbol, [])
-            cache[symbol] = _build_reference_line_index(payload)
-        return cache
+            many_cache[symbol] = _build_reference_line_index(payload)
+        return many_cache
     if reference_lookup_fn is None:
         return {}
-    cache: dict[str, _ReferenceLineIndex] = {}
+    single_cache: dict[str, _ReferenceLineIndex] = {}
     for symbol in symbols:
-        cache[symbol] = _build_reference_line_index(reference_lookup_fn(symbol))
-    return cache
+        single_cache[symbol] = _build_reference_line_index(reference_lookup_fn(symbol))
+    return single_cache
 
 
 def _ranking_signals_for_hit(
@@ -444,7 +448,7 @@ def _ranking_signals_for_hit(
 
 
 def _build_reference_line_index(
-    records: list[object] | tuple[tuple[str, int], ...],
+    records: Sequence[object] | tuple[tuple[str, int], ...],
 ) -> _ReferenceLineIndex:
     lines_by_path: dict[str, list[int]] = {}
     for item in records:
@@ -462,15 +466,15 @@ def _build_reference_line_index(
             continue
         if not isinstance(item, dict):
             continue
-        path = item.get("path")
-        line = item.get("line")
-        if not isinstance(path, str):
+        path_value = item.get("path")
+        line_value = item.get("line")
+        if not isinstance(path_value, str):
             continue
-        if not isinstance(line, int):
+        if not isinstance(line_value, int):
             continue
-        if line < 1:
+        if line_value < 1:
             continue
-        lines_by_path.setdefault(path, []).append(line)
+        lines_by_path.setdefault(path_value, []).append(line_value)
     return {
         path: tuple(sorted(lines))
         for path, lines in sorted(lines_by_path.items(), key=lambda item: item[0])
