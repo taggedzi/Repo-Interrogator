@@ -408,6 +408,17 @@ Important:
 - Bundling uses search hits, so files must be indexed to appear in bundles.
 - If you need TS/JS/Java/Go/Rust/C++/C# in bundles, add their extensions to `index.include_extensions` in `repo_mcp.toml`.
 
+## LLM Performance Checklist
+
+Use this checklist to keep retrieval fast and predictable in AI workflows:
+
+- Scope references when possible: prefer `repo.references` with `path` for file-focused analysis.
+- Keep index excludes tuned: ensure `index.exclude_globs` removes cache/build/tooling directories.
+- Keep index includes focused: include only language extensions needed for your repository tasks.
+- Bound response sizes: use `top_k` for search/references and strict budgets for bundles.
+- Avoid repeated broad scans in loops: cache or reuse result IDs client-side when possible.
+- Verify active config first: call `repo.status` and inspect `effective_config.index` and `limits_summary`.
+
 ## `repo.audit_log`
 Read sanitized audit events.
 

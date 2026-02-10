@@ -445,7 +445,7 @@ class WorkflowValidator:
                 "method": "repo.references",
                 "params": {
                     "symbol": symbol,
-                    "path_scope": "src/repo_mcp/server.py",
+                    "path": "src/repo_mcp/server.py",
                     "top_k": 10,
                 },
             }
@@ -456,7 +456,7 @@ class WorkflowValidator:
                 "method": "repo.references",
                 "params": {
                     "symbol": symbol,
-                    "path_scope": "src/repo_mcp/server.py",
+                    "path": "src/repo_mcp/server.py",
                     "top_k": 10,
                 },
             }

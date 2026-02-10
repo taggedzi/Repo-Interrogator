@@ -150,6 +150,17 @@ Interpretation notes:
 - Each selection includes `why_selected` with signal and score component details.
 - `audit.ranking_debug` includes bounded ranking candidate diagnostics.
 
+## LLM Performance Checklist
+
+Use this checklist to keep retrieval fast and predictable in AI client workflows:
+
+- Scope references when possible: prefer `repo.references` with `path` for file-focused analysis.
+- Keep index excludes tuned: ensure `index.exclude_globs` removes cache/build/tooling directories.
+- Keep index includes focused: include only language extensions needed for your repository tasks.
+- Bound response sizes: use `top_k` for search/references and strict budgets for bundles.
+- Avoid unbounded broad scans in loops: cache/reuse results client-side when issuing repeated prompts.
+- Verify active config first: call `repo.status` and inspect `effective_config.index` + `limits_summary`.
+
 ## How to interpret and use results safely
 
 - Treat `blocked: true` as final for that request. Do not guess hidden content.
