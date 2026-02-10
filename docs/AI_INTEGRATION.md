@@ -150,6 +150,52 @@ Interpretation notes:
 - Each selection includes `why_selected` with signal and score component details.
 - `audit.ranking_debug` includes bounded ranking candidate diagnostics.
 
+## LLM Workflow Recipes (v2.6)
+
+Use these as deterministic client playbooks.
+
+### Recipe A: Bug Investigation
+
+When a bug report names behavior but not exact file:
+
+1. `repo.refresh_index`
+2. `repo.search` with symptom + likely symbol terms
+3. `repo.open_file` on top hit ranges
+4. `repo.build_context_bundle` with strict budget
+
+Expected evidence fields:
+- bundle `selections[*].why_selected`
+- bundle `citations[*]`
+- bundle `audit.selection_debug.why_not_selected_summary`
+
+### Recipe B: Refactor Impact Analysis
+
+Before renaming/changing a symbol contract:
+
+1. `repo.outline` for declaration boundaries
+2. `repo.references` for cross-file usage (`symbol`, optional `path`)
+3. `repo.build_context_bundle` for a compact change-impact packet
+
+Expected evidence fields:
+- references `references[*].path`
+- references `references[*].line`
+- references `references[*].strategy`
+- references `references[*].confidence`
+
+### Recipe C: API/Data-Flow Tracing
+
+For "how does request X propagate?" prompts:
+
+1. `repo.search` for entrypoint/handler/router terms
+2. `repo.references` for key handoff symbols
+3. `repo.open_file` on edge transitions
+4. `repo.build_context_bundle` for final cited trace context
+
+Expected evidence fields:
+- bundle `audit.ranking_debug.top_candidates`
+- bundle `audit.selection_debug.why_not_selected_summary.top_skipped`
+- bundle `totals` and `citations`
+
 ## LLM Performance Checklist
 
 Use this checklist to keep retrieval fast and predictable in AI client workflows:

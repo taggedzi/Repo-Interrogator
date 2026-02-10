@@ -496,6 +496,116 @@ Optional multilingual outline checks:
 }
 ```
 
+## LLM Workflow Recipes (v2.6)
+
+These recipes are intended as repeatable, end-to-end patterns for common AI-assisted tasks.
+
+### 1) Bug Investigation
+
+Goal: isolate likely faulty implementation and collect compact cited context.
+
+1. Refresh index:
+
+```json
+{"id":"bug-1","method":"repo.refresh_index","params":{"force":false}}
+```
+
+2. Search symptom/function terms:
+
+```json
+{"id":"bug-2","method":"repo.search","params":{"query":"Service.run timeout parse error","mode":"bm25","top_k":8}}
+```
+
+3. Open top hit line range:
+
+```json
+{"id":"bug-3","method":"repo.open_file","params":{"path":"src/service.py","start_line":1,"end_line":120}}
+```
+
+4. Build focused bundle:
+
+```json
+{
+  "id": "bug-4",
+  "method": "repo.build_context_bundle",
+  "params": {
+    "prompt": "find likely bug in Service.run and nearby call flow",
+    "budget": {"max_files": 3, "max_total_lines": 120},
+    "strategy": "hybrid",
+    "include_tests": false
+  }
+}
+```
+
+Check:
+- `result.selections[*].why_selected`
+- `result.citations[*]`
+- `result.audit.selection_debug.why_not_selected_summary`
+
+### 2) Refactor Impact Analysis
+
+Goal: estimate affected files before changing a symbol/API.
+
+1. Confirm declaration boundaries:
+
+```json
+{"id":"ref-1","method":"repo.outline","params":{"path":"src/service.py"}}
+```
+
+2. Resolve cross-file usages for target symbol:
+
+```json
+{"id":"ref-2","method":"repo.references","params":{"symbol":"Service.run","top_k":50}}
+```
+
+3. (Optional) Scope to one file when reviewing local impact:
+
+```json
+{"id":"ref-3","method":"repo.references","params":{"symbol":"Service.run","path":"src/handlers.py","top_k":50}}
+```
+
+Check:
+- `result.references[*].path`
+- `result.references[*].line`
+- `result.references[*].strategy`
+- `result.references[*].confidence`
+
+### 3) API/Data-Flow Tracing
+
+Goal: trace request path across entrypoint, orchestrator, and service layers.
+
+1. Locate likely entrypoints:
+
+```json
+{"id":"flow-1","method":"repo.search","params":{"query":"handle_request route controller service", "mode":"bm25","top_k":10}}
+```
+
+2. Follow symbol usages:
+
+```json
+{"id":"flow-2","method":"repo.references","params":{"symbol":"handle_request","top_k":50}}
+```
+
+3. Build trace bundle for explanation/citations:
+
+```json
+{
+  "id": "flow-3",
+  "method": "repo.build_context_bundle",
+  "params": {
+    "prompt": "trace request flow from API entrypoint through handlers into service calls",
+    "budget": {"max_files": 5, "max_total_lines": 180},
+    "strategy": "hybrid",
+    "include_tests": false
+  }
+}
+```
+
+Check:
+- `result.audit.ranking_debug.top_candidates`
+- `result.audit.selection_debug.why_not_selected_summary.top_skipped`
+- `result.totals` and `result.citations` for bounded, auditable context
+
 ## Profiling Workflow Performance
 
 Use the built-in workflow validator profiler when diagnosing bottlenecks:
