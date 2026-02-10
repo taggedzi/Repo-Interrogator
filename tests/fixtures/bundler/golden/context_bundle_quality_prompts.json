@@ -1,0 +1,46 @@
+{
+  "path traversal blocked secrets": {
+    "budget_enforcement_count": 1,
+    "selected_paths": [
+      "src/repo_mcp/security/policy.py",
+      "docs/security.md"
+    ],
+    "selected_symbols": [
+      "blocked_path_traversal"
+    ],
+    "top_ranked_paths": [
+      "src/repo_mcp/security/policy.py",
+      "docs/security.md",
+      "src/repo_mcp/server.py"
+    ],
+    "top_ranked_selected": [
+      true,
+      true,
+      false
+    ]
+  },
+  "request id fallback routing": {
+    "budget_enforcement_count": 1,
+    "selected_paths": [
+      "src/repo_mcp/server.py",
+      "docs/notes.md",
+      "src/repo_mcp/server.py"
+    ],
+    "selected_symbols": [
+      "StdioServer.next_request_id",
+      "StdioServer.extract_request_id"
+    ],
+    "top_ranked_paths": [
+      "src/repo_mcp/server.py",
+      "docs/notes.md",
+      "src/repo_mcp/server.py",
+      "src/repo_mcp/server.py"
+    ],
+    "top_ranked_selected": [
+      true,
+      true,
+      true,
+      false
+    ]
+  }
+}
