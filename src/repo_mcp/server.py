@@ -520,6 +520,7 @@ class StdioServer:
             outline_fn=self._bundle_outline_symbols,
             reference_lookup_fn=self._bundle_reference_lookup(),
             reference_lookup_many_fn=self._bundle_reference_lookup_many(),
+            reference_lookup_scoped_many_fn=self._bundle_reference_lookup_many_scoped(),
             include_tests=include_tests,
             strategy="hybrid",
             top_k_per_query=self._limits.max_search_hits,
@@ -969,6 +970,76 @@ class StdioServer:
             return {symbol: symbol_cache.get(symbol, ()) for symbol in normalized}
 
         return lookup
+
+    def _bundle_reference_lookup_many_scoped(
+        self,
+    ) -> Callable[[dict[str, tuple[str, ...]]], dict[str, tuple[tuple[str, int], ...]]]:
+        """Build deterministic scoped batch lookup for bundle ranking proximity."""
+        path_cache: dict[str, tuple[str, str] | None] = {}
+
+        def lookup(
+            symbol_paths: dict[str, tuple[str, ...]],
+        ) -> dict[str, tuple[tuple[str, int], ...]]:
+            symbol_order = sorted(
+                symbol.strip()
+                for symbol in symbol_paths.keys()
+                if isinstance(symbol, str) and symbol.strip()
+            )
+            if not symbol_order:
+                return {}
+
+            path_to_symbols: dict[str, set[str]] = {}
+            for symbol in symbol_order:
+                raw_paths = symbol_paths.get(symbol, ())
+                for path in sorted({item for item in raw_paths if isinstance(item, str) and item}):
+                    path_to_symbols.setdefault(path, set()).add(symbol)
+
+            references_by_symbol: dict[str, list[tuple[str, int]]] = {
+                symbol: [] for symbol in symbol_order
+            }
+            for path in sorted(path_to_symbols.keys()):
+                cached = path_cache.get(path)
+                if cached is None:
+                    cached = self._bundle_reference_source_file(path)
+                    path_cache[path] = cached
+                if cached is None:
+                    continue
+                symbols_for_path = sorted(path_to_symbols[path])
+                resolved = self._collect_symbol_references_many(symbols_for_path, [cached])
+                for symbol in symbols_for_path:
+                    for reference in resolved.get(symbol, []):
+                        references_by_symbol[symbol].append((reference.path, reference.line))
+
+            output: dict[str, tuple[tuple[str, int], ...]] = {}
+            for symbol in symbol_order:
+                pairs = sorted(
+                    set(references_by_symbol[symbol]),
+                    key=lambda item: (item[0], item[1]),
+                )
+                output[symbol] = tuple(pairs)
+            return output
+
+        return lookup
+
+    def _bundle_reference_source_file(self, path: str) -> tuple[str, str] | None:
+        """Return one readable repo-relative source file for bundle reference lookups."""
+        try:
+            resolved = resolve_repo_path(repo_root=self._repo_root, candidate=path)
+            enforce_file_access_policy(
+                repo_root=self._repo_root,
+                resolved_path=resolved,
+                limits=self._limits,
+            )
+        except (PolicyBlockedError, ValueError):
+            return None
+        if not resolved.exists() or not resolved.is_file():
+            return None
+        try:
+            text = resolved.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+        relative = resolved.relative_to(self._repo_root).as_posix()
+        return relative, text
 
 
 def create_server(

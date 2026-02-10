@@ -61,6 +61,16 @@ class ReferenceLookupManyFn(Protocol):
         """Return declaration-linked reference records grouped by symbol."""
 
 
+class ReferenceLookupScopedManyFn(Protocol):
+    """Batch reference lookup callback scoped to symbol/path pairs."""
+
+    def __call__(
+        self,
+        symbol_paths: dict[str, tuple[str, ...]],
+    ) -> dict[str, list[object] | tuple[tuple[str, int], ...]]:
+        """Return declaration-linked reference records grouped by symbol."""
+
+
 class BundleProfileSink(Protocol):
     """Optional callback used for targeted bundler profiling payloads."""
 
@@ -80,6 +90,7 @@ def build_context_bundle(
     outline_fn: OutlineFn | None = None,
     reference_lookup_fn: ReferenceLookupFn | None = None,
     reference_lookup_many_fn: ReferenceLookupManyFn | None = None,
+    reference_lookup_scoped_many_fn: ReferenceLookupScopedManyFn | None = None,
     profile_sink: BundleProfileSink | None = None,
 ) -> BundleResult:
     """Build deterministic context bundle using multi-query search and budgets."""
@@ -118,6 +129,7 @@ def build_context_bundle(
         prompt_terms=prompt_terms,
         reference_lookup_fn=reference_lookup_fn,
         reference_lookup_many_fn=reference_lookup_many_fn,
+        reference_lookup_scoped_many_fn=reference_lookup_scoped_many_fn,
     )
     ranking_seconds = time.perf_counter() - ranking_started
 
@@ -289,12 +301,14 @@ def _rank_hits(
     prompt_terms: tuple[str, ...],
     reference_lookup_fn: ReferenceLookupFn | None,
     reference_lookup_many_fn: ReferenceLookupManyFn | None,
+    reference_lookup_scoped_many_fn: ReferenceLookupScopedManyFn | None,
 ) -> list[_Hit]:
     prompt_term_set = frozenset(prompt_terms)
     reference_cache = _prefetch_reference_pairs(
         hits=hits,
         reference_lookup_fn=reference_lookup_fn,
         reference_lookup_many_fn=reference_lookup_many_fn,
+        reference_lookup_scoped_many_fn=reference_lookup_scoped_many_fn,
     )
     symbol_token_cache: dict[str, frozenset[str]] = {}
     path_relevance_cache: dict[str, int] = {}
@@ -320,6 +334,7 @@ def _prefetch_reference_pairs(
     hits: list[_Hit],
     reference_lookup_fn: ReferenceLookupFn | None,
     reference_lookup_many_fn: ReferenceLookupManyFn | None,
+    reference_lookup_scoped_many_fn: ReferenceLookupScopedManyFn | None,
 ) -> dict[str, _ReferenceLineIndex]:
     symbols = sorted(
         {
@@ -330,6 +345,23 @@ def _prefetch_reference_pairs(
     )
     if not symbols:
         return {}
+    if reference_lookup_scoped_many_fn is not None:
+        symbol_paths: dict[str, tuple[str, ...]] = {}
+        for symbol in symbols:
+            paths = sorted(
+                {
+                    hit.path
+                    for hit in hits
+                    if hit.aligned_symbol == symbol and isinstance(hit.path, str) and hit.path
+                }
+            )
+            symbol_paths[symbol] = tuple(paths)
+        grouped = reference_lookup_scoped_many_fn(symbol_paths)
+        cache: dict[str, _ReferenceLineIndex] = {}
+        for symbol in symbols:
+            payload = grouped.get(symbol, [])
+            cache[symbol] = _build_reference_line_index(payload)
+        return cache
     if reference_lookup_many_fn is not None:
         grouped = reference_lookup_many_fn(symbols)
         cache: dict[str, _ReferenceLineIndex] = {}
