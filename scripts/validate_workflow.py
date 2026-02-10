@@ -53,6 +53,7 @@ class WorkflowValidator:
         response_timeout_seconds: float,
         profile_enabled: bool,
         profile_output_path: Path | None,
+        profile_references: bool,
     ) -> None:
         self.repo_root = repo_root.resolve()
         self.data_dir = data_dir.resolve() if data_dir is not None else None
@@ -60,6 +61,7 @@ class WorkflowValidator:
         self.response_timeout_seconds = response_timeout_seconds
         self.profile_enabled = profile_enabled
         self.profile_output_path = profile_output_path
+        self.profile_references = profile_references
         self.proc: subprocess.Popen[str] | None = None
         self.results: list[CheckResult] = []
         self.step_timings: list[StepTiming] = []
@@ -131,6 +133,8 @@ class WorkflowValidator:
         cmd = [sys.executable, "-m", "repo_mcp.server", "--repo-root", str(self.repo_root)]
         if self.data_dir is not None:
             cmd.extend(["--data-dir", str(self.data_dir)])
+        if self.profile_references:
+            env["REPO_MCP_PROFILE_REFERENCES"] = "1"
 
         print(f"$ {' '.join(cmd)}")
         self.proc = subprocess.Popen(
@@ -139,6 +143,7 @@ class WorkflowValidator:
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
+            env=env,
         )
 
     def _stop_server(self) -> None:
@@ -249,9 +254,7 @@ class WorkflowValidator:
                 "index_status",
                 "limits_summary",
                 "effective_config",
-            }.issubset(
-                set(result.keys())
-            ),
+            }.issubset(set(result.keys())),
             "repo.status should include core fields.",
             expected="result contains repo_root/index_status/limits_summary/effective_config",
             actual=self._result_keys(result),
@@ -555,9 +558,7 @@ class WorkflowValidator:
         if isinstance(references, list) and references:
             sample = references[0]
             sample_keys = (
-                sorted(sample.keys())
-                if isinstance(sample, dict)
-                else type(sample).__name__
+                sorted(sample.keys()) if isinstance(sample, dict) else type(sample).__name__
             )
             self._assert_true(
                 "references.record_shape",
@@ -572,9 +573,7 @@ class WorkflowValidator:
                     "confidence",
                 }.issubset(set(sample.keys())),
                 "repo.references records should include contract fields.",
-                expected=(
-                    "reference has symbol/path/line/kind/evidence/strategy/confidence"
-                ),
+                expected=("reference has symbol/path/line/kind/evidence/strategy/confidence"),
                 actual=f"sample keys={sample_keys}",
             )
 
@@ -647,9 +646,7 @@ class WorkflowValidator:
                 actual=f"why_selected={type(why_selected).__name__}",
             )
             score_components = (
-                why_selected.get("score_components")
-                if isinstance(why_selected, dict)
-                else None
+                why_selected.get("score_components") if isinstance(why_selected, dict) else None
             )
             self._assert_true(
                 "bundle.score_components_shape",
@@ -898,6 +895,14 @@ def parse_args() -> argparse.Namespace:
             "When omitted, cProfile is disabled."
         ),
     )
+    parser.add_argument(
+        "--profile-references",
+        action="store_true",
+        help=(
+            "Enable server-side targeted profiling for repo.references candidate discovery "
+            "and adapter resolution paths."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -912,6 +917,7 @@ def main() -> int:
         response_timeout_seconds=args.response_timeout_seconds,
         profile_enabled=profile_enabled,
         profile_output_path=profile_output,
+        profile_references=bool(args.profile_references),
     )
     if args.cprofile_output:
         profiler = cProfile.Profile()

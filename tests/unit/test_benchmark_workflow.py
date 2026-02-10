@@ -64,8 +64,10 @@ def test_summarize_runs_includes_expected_fields(tmp_path: Path) -> None:
         exit_code=0,
         elapsed_seconds=10.0,
         profile_path=tmp_path / "run_01.json",
+        references_profile_path=None,
         total_elapsed_seconds=9.5,
         steps={"repo.refresh_index": 4.0, "repo.build_context_bundle": 5.0},
+        references_metrics={},
     )
     summary = module.summarize_runs([run])
     assert summary["runs"] == 1
@@ -90,3 +92,49 @@ def test_prune_old_sessions_keeps_newest(tmp_path: Path) -> None:
     assert removed == ["session-20260101T010101Z"]
     remaining = sorted(path.name for path in tmp_path.iterdir() if path.is_dir())
     assert remaining == ["session-20260102T010101Z", "session-20260103T010101Z"]
+
+
+def test_summarize_reference_profile_extracts_targeted_metrics(tmp_path: Path) -> None:
+    module = _load_benchmark_module()
+    profile_path = tmp_path / "references.jsonl"
+    profile_path.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "candidate_discovery": {
+                            "candidate_discovery_seconds": 1.2,
+                            "discover_files_seconds": 0.2,
+                            "policy_seconds": 0.3,
+                            "read_files_seconds": 0.7,
+                        },
+                        "adapter_resolution": {
+                            "adapter_select_seconds": 0.04,
+                            "resolver_seconds": 0.6,
+                            "normalize_sort_seconds": 0.01,
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "candidate_discovery": {
+                            "candidate_discovery_seconds": 1.0,
+                            "discover_files_seconds": 0.1,
+                            "policy_seconds": 0.2,
+                            "read_files_seconds": 0.7,
+                        },
+                        "adapter_resolution": {
+                            "adapter_select_seconds": 0.05,
+                            "resolver_seconds": 0.5,
+                            "normalize_sort_seconds": 0.02,
+                        },
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    summary = module.summarize_reference_profile(profile_path)
+    assert summary["candidate_discovery_seconds_mean"] == 1.1
+    assert summary["adapter_select_seconds_mean"] == 0.045

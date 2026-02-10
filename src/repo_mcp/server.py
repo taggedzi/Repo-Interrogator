@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import os
 import sys
+import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -90,6 +92,11 @@ class StdioServer:
             config=self._config,
         )
         self._fallback_request_counter = 0
+        self._reference_profile_enabled = os.getenv(
+            "REPO_MCP_PROFILE_REFERENCES", ""
+        ).strip().lower() in {"1", "true", "yes"}
+        self._reference_profile_path = self._data_dir / "perf" / "references_profile.jsonl"
+        self._reference_profile_sequence = 0
 
     def serve(self, in_stream: TextIO, out_stream: TextIO) -> None:
         """Process JSON-line requests from stdin and write JSON-line responses."""
@@ -545,10 +552,29 @@ class StdioServer:
                 message="repo.references top_k must be >= 1.",
             )
 
-        files = self._reference_source_files(path_scope)
-        candidates = self._collect_symbol_references(symbol=symbol, files=files)
+        profile_entry: dict[str, object] | None = (
+            {
+                "symbol_length": len(symbol),
+                "path_scope_present": path_scope is not None,
+                "top_k": top_k_value,
+            }
+            if self._reference_profile_enabled
+            else None
+        )
+        started = time.perf_counter()
+        files = self._reference_source_files(path_scope, profile_entry)
+        candidates = self._collect_symbol_references(
+            symbol=symbol, files=files, profile=profile_entry
+        )
+        resolve_elapsed = time.perf_counter() - started
         total_candidates = len(candidates)
         limited = candidates[:top_k_value]
+        if profile_entry is not None:
+            profile_entry["resolve_references_seconds"] = resolve_elapsed
+            profile_entry["total_candidates"] = total_candidates
+            profile_entry["returned_candidates"] = len(limited)
+            profile_entry["truncated"] = len(limited) < total_candidates
+            self._write_references_profile(profile_entry)
         return {
             "symbol": symbol,
             "references": [asdict(item) for item in limited],
@@ -556,27 +582,53 @@ class StdioServer:
             "total_candidates": total_candidates,
         }
 
-    def _reference_source_files(self, path_scope: str | None) -> list[tuple[str, str]]:
+    def _reference_source_files(
+        self,
+        path_scope: str | None,
+        profile: dict[str, object] | None = None,
+    ) -> list[tuple[str, str]]:
+        started = time.perf_counter()
         if path_scope is not None:
+            policy_started = time.perf_counter()
             resolved = resolve_repo_path(repo_root=self._repo_root, candidate=path_scope)
             enforce_file_access_policy(
                 repo_root=self._repo_root,
                 resolved_path=resolved,
                 limits=self._limits,
             )
+            policy_elapsed = time.perf_counter() - policy_started
             if not resolved.exists() or not resolved.is_file():
                 raise ToolDispatchError(
                     code="INVALID_PARAMS",
                     message=f"repo.references path is not a readable file: {path_scope}",
                 )
             relative = resolved.relative_to(self._repo_root).as_posix()
+            read_started = time.perf_counter()
             text = resolved.read_text(encoding="utf-8", errors="replace")
+            read_elapsed = time.perf_counter() - read_started
+            if profile is not None:
+                profile["candidate_discovery"] = {
+                    "mode": "path",
+                    "records_discovered": 1,
+                    "records_allowed": 1,
+                    "records_blocked": 0,
+                    "discover_files_seconds": 0.0,
+                    "policy_seconds": policy_elapsed,
+                    "read_files_seconds": read_elapsed,
+                    "candidate_discovery_seconds": time.perf_counter() - started,
+                }
             return [(relative, text)]
 
         files: list[tuple[str, str]] = []
+        discover_started = time.perf_counter()
         records = discover_files(self._repo_root, self._config.index)
+        discover_elapsed = time.perf_counter() - discover_started
+        policy_seconds = 0.0
+        read_seconds = 0.0
+        blocked = 0
         for record in records:
             candidate = self._repo_root / record.path
+            policy_started = time.perf_counter()
             try:
                 enforce_file_access_policy(
                     repo_root=self._repo_root,
@@ -584,30 +636,123 @@ class StdioServer:
                     limits=self._limits,
                 )
             except PolicyBlockedError:
+                policy_seconds += time.perf_counter() - policy_started
+                blocked += 1
                 continue
+            policy_seconds += time.perf_counter() - policy_started
+            read_started = time.perf_counter()
             text = candidate.read_text(encoding="utf-8", errors="replace")
+            read_seconds += time.perf_counter() - read_started
             files.append((record.path, text))
+        if profile is not None:
+            profile["candidate_discovery"] = {
+                "mode": "discover",
+                "records_discovered": len(records),
+                "records_allowed": len(files),
+                "records_blocked": blocked,
+                "discover_files_seconds": discover_elapsed,
+                "policy_seconds": policy_seconds,
+                "read_files_seconds": read_seconds,
+                "candidate_discovery_seconds": time.perf_counter() - started,
+            }
         return files
 
     def _collect_symbol_references(
-        self, symbol: str, files: list[tuple[str, str]]
+        self,
+        symbol: str,
+        files: list[tuple[str, str]],
+        profile: dict[str, object] | None = None,
     ) -> list[SymbolReference]:
         by_path: dict[str, list[tuple[str, str]]] = {}
         for path, text in files:
             by_path.setdefault(path, []).append((path, text))
 
         references: list[SymbolReference] = []
+        select_seconds = 0.0
+        resolver_seconds = 0.0
+        resolver_failures = 0
+        adapter_stats: dict[str, dict[str, object]] = {}
         for path in sorted(by_path.keys()):
+            select_started = time.perf_counter()
             adapter = self._adapters.select(path)
+            select_elapsed = time.perf_counter() - select_started
+            select_seconds += select_elapsed
             resolver = getattr(adapter, "references_for_symbol", None)
+            adapter_bucket = adapter_stats.setdefault(
+                adapter.name,
+                {
+                    "paths": 0,
+                    "select_seconds": 0.0,
+                    "resolver_calls": 0,
+                    "resolver_seconds": 0.0,
+                    "resolver_failures": 0,
+                },
+            )
+            adapter_bucket["paths"] = int(adapter_bucket["paths"]) + 1
+            adapter_bucket["select_seconds"] = (
+                float(adapter_bucket["select_seconds"]) + select_elapsed
+            )
             if not callable(resolver):
                 continue
+            resolver_started = time.perf_counter()
             try:
                 resolved = resolver(symbol, by_path[path], top_k=None)
             except Exception:
+                resolver_elapsed = time.perf_counter() - resolver_started
+                resolver_seconds += resolver_elapsed
+                resolver_failures += 1
+                adapter_bucket["resolver_calls"] = int(adapter_bucket["resolver_calls"]) + 1
+                adapter_bucket["resolver_seconds"] = (
+                    float(adapter_bucket["resolver_seconds"]) + resolver_elapsed
+                )
+                adapter_bucket["resolver_failures"] = int(adapter_bucket["resolver_failures"]) + 1
                 continue
+            resolver_elapsed = time.perf_counter() - resolver_started
+            resolver_seconds += resolver_elapsed
+            adapter_bucket["resolver_calls"] = int(adapter_bucket["resolver_calls"]) + 1
+            adapter_bucket["resolver_seconds"] = (
+                float(adapter_bucket["resolver_seconds"]) + resolver_elapsed
+            )
             references.extend(resolved)
-        return normalize_and_sort_references(references)
+        normalize_started = time.perf_counter()
+        normalized = normalize_and_sort_references(references)
+        normalize_elapsed = time.perf_counter() - normalize_started
+        if profile is not None:
+            profile["adapter_resolution"] = {
+                "unique_paths": len(by_path),
+                "adapter_select_seconds": select_seconds,
+                "resolver_seconds": resolver_seconds,
+                "resolver_failures": resolver_failures,
+                "normalize_sort_seconds": normalize_elapsed,
+                "adapters": {
+                    name: {
+                        "paths": int(values["paths"]),
+                        "select_seconds": float(values["select_seconds"]),
+                        "resolver_calls": int(values["resolver_calls"]),
+                        "resolver_seconds": float(values["resolver_seconds"]),
+                        "resolver_failures": int(values["resolver_failures"]),
+                    }
+                    for name, values in sorted(adapter_stats.items())
+                },
+            }
+        return normalized
+
+    def _write_references_profile(self, payload: dict[str, object]) -> None:
+        if not self._reference_profile_enabled:
+            return
+        self._reference_profile_sequence += 1
+        entry = {
+            "timestamp": utc_timestamp(),
+            "sequence": self._reference_profile_sequence,
+            **payload,
+        }
+        try:
+            self._reference_profile_path.parent.mkdir(parents=True, exist_ok=True)
+            with self._reference_profile_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(entry, sort_keys=True))
+                handle.write("\n")
+        except OSError:
+            return
 
     def _write_last_bundle_artifacts(self, payload: dict[str, object]) -> list[str]:
         warnings: list[str] = []

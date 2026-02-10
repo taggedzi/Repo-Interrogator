@@ -47,7 +47,6 @@ For historical detail, see:
 
 ## Later
 
-- [ ] `PERF-003` Add targeted profiling for `repo.references` candidate discovery and adapter resolution paths.
 - [ ] `PERF-004` Add targeted profiling for bundler ranking/dedupe budget enforcement paths.
 - [ ] `PERF-005` Add profiling summary docs + playbook for diagnosing hardware vs software bottlenecks.
 - [ ] `PERF-006` Add optional regression guardrails (non-blocking thresholds) for perf drift in CI/local checks.
@@ -71,6 +70,7 @@ For historical detail, see:
 - [x] `V2.5-REF-003` Added Python AST-based symbol usage extraction with deterministic reference linking and ordering.
 - [x] `PERF-001` Added opt-in workflow profiling artifacts and optional cProfile capture in `scripts/validate_workflow.py`; documented contract and ADR.
 - [x] `PERF-002` Added multi-scenario benchmark runner (`self`, `medium`, `large`) with sessioned artifacts, stable protocol metadata, and retention pruning under `.repo_mcp/perf/`.
+- [x] `PERF-003` Added targeted `repo.references` profiling for candidate discovery and adapter resolution paths, with per-run JSONL artifacts and benchmark summaries.
 - [x] `DOC-001` Added/updated contributor and security/community templates (`CONTRIBUTING.md`, `SECURITY.md`, issue/PR templates).
 - [x] `DOC-002` Updated `docs/USAGE.md` and `docs/AI_INTEGRATION.md` for v2 outline fields/semantics.
 

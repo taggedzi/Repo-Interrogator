@@ -29,6 +29,10 @@ Adopt a built-in, opt-in profiling harness centered on `scripts/validate_workflo
   * 3 runs per scenario per benchmark invocation
   * artifacts stored under `<repo_root>/.repo_mcp/perf/` in sessioned directories
   * configurable retention with deterministic pruning of older `session-*` directories
+* Add targeted `repo.references` profiling mode that captures:
+  * candidate discovery timing slices
+  * adapter resolution timing slices
+  * per-run JSONL artifacts retained with benchmark sessions
 
 ### Rationale
 

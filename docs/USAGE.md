@@ -528,6 +528,12 @@ Run only specific scenarios:
 .venv/bin/python scripts/benchmark_workflow.py --repo-root . --scenarios self,medium
 ```
 
+Enable targeted `repo.references` profiling in benchmark runs:
+
+```bash
+.venv/bin/python scripts/benchmark_workflow.py --repo-root . --profile-references
+```
+
 Control retention for session artifacts:
 
 ```bash
@@ -538,6 +544,7 @@ Notes:
 - Profiling is opt-in and disabled by default.
 - Profiling output is diagnostic metadata only; tool output contracts are unchanged.
 - Benchmark outputs are sessioned under `.repo_mcp/perf/session-*/` with a latest summary at `.repo_mcp/perf/benchmark_summary.json`.
+- With `--profile-references`, per-run `repo.references` timing artifacts are written as `references_run_*.jsonl` inside each scenario session directory.
 
 ## Language Adapter Limitations
 

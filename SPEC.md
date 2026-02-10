@@ -642,6 +642,10 @@ Benchmark protocol:
 * Benchmark artifact retention must be deterministic and configurable:
   * keep newest `N` sessions (default 10),
   * prune older `session-*` directories.
+* Targeted `repo.references` profiling (opt-in) must capture and retain:
+  * candidate discovery timings (`discover_files`, policy checks, file reads)
+  * adapter resolution timings (`adapter_select`, resolver execution, normalize/sort)
+  * per-run reference profiling artifacts and aggregate summaries in benchmark output.
 
 Non-goals for baseline profiling:
 
