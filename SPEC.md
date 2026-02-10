@@ -475,13 +475,46 @@ Outputs:
 
 1. Extract keywords from prompt
 2. Run multiple searches (prompt + keywords)
-3. Rank and dedupe hits
+3. Rank and dedupe hits using explicit deterministic signals and tie-breaks
 4. For Python files:
 
    * prefer symbol-aligned ranges
 5. Open minimal necessary ranges
 6. Enforce budgets strictly
 7. Emit per-excerpt rationale
+
+#### Deterministic ranking signals and tie-break rules (v2.5)
+
+Bundle candidate ranking must use a deterministic lexicographic key.
+No randomization, floating nondeterministic behavior, or platform-dependent ordering is allowed.
+
+Ranking signals (in priority order):
+
+1. `definition_match` (bool, desc):
+   candidate range overlaps a declaration whose normalized symbol name matches prompt-derived symbols (adapter hints + extracted keywords).
+2. `reference_proximity` (tuple, desc by first, asc by second):
+   * `reference_count_in_range` (int): number of declaration-linked references in the candidate range
+   * `min_definition_distance` (int): minimum absolute line distance from candidate range to matching declaration line; smaller is better
+3. `path_name_relevance` (int, desc):
+   count of normalized prompt-token matches against file stem and path segments.
+4. `search_score` (number, desc):
+   deterministic base retrieval score from search/index layer.
+5. `range_size_penalty` (int, asc):
+   line span size (`end_line - start_line + 1`); smaller ranges win when higher-priority signals are equal.
+
+Tie-break rules (when all signals above are equal):
+
+1. `path` ascending (normalized repo-relative path)
+2. `start_line` ascending
+3. `end_line` ascending
+4. `source_query` ascending (normalized query variant text)
+5. `candidate_id` ascending (stable deterministic identifier)
+
+Requirements:
+
+* Missing signal values must be represented deterministically (`reference_count_in_range = 0`, `min_definition_distance = +inf` sentinel, etc.).
+* Ranking and tie-break behavior must be auditable from bundle debug metadata.
+* Given identical repo state and inputs, selected bundle ordering must be identical across repeated runs.
 
 **Important:**
 No LLM calls.
