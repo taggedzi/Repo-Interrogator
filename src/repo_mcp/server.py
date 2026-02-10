@@ -6,6 +6,7 @@ import argparse
 import fnmatch
 import json
 import sys
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TextIO
@@ -502,6 +503,7 @@ class StdioServer:
             search_fn=self._index_manager.search,
             read_lines_fn=self._read_repo_lines,
             outline_fn=self._bundle_outline_symbols,
+            reference_lookup_fn=self._bundle_reference_lookup(),
             include_tests=include_tests,
             strategy="hybrid",
             top_k_per_query=self._limits.max_search_hits,
@@ -647,6 +649,25 @@ class StdioServer:
             if isinstance(item, dict):
                 safe_symbols.append(item)
         return safe_symbols
+
+    def _bundle_reference_lookup(self) -> Callable[[str], list[dict[str, object]]]:
+        """Build lazy deterministic reference lookup closure for bundle ranking."""
+        files_cache: list[tuple[str, str]] | None = None
+        symbol_cache: dict[str, list[dict[str, object]]] = {}
+
+        def lookup(symbol: str) -> list[dict[str, object]]:
+            nonlocal files_cache
+            cached = symbol_cache.get(symbol)
+            if cached is not None:
+                return cached
+            if files_cache is None:
+                files_cache = self._reference_source_files(None)
+            references = self._collect_symbol_references(symbol=symbol, files=files_cache)
+            payload = [asdict(item) for item in references]
+            symbol_cache[symbol] = payload
+            return payload
+
+        return lookup
 
 
 def create_server(

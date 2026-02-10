@@ -18,7 +18,7 @@
     "max_files": 2,
     "max_total_lines": 16
   },
-  "bundle_id": "b860efd24d945b52959bdfaa3ff0224048ed42184888dd0048a0cb048b459700",
+  "bundle_id": "eefba3561146b1495fb6f89df3bd02f8c744982ab66783758634ee5d170d66da",
   "citations": [
     {
       "end_line": 7,
@@ -47,6 +47,7 @@
         "matched_signals": [
           "search_score",
           "matched_terms",
+          "definition_match",
           "aligned_symbol"
         ],
         "matched_terms": [
@@ -54,6 +55,11 @@
           "service"
         ],
         "score_components": {
+          "definition_match": true,
+          "min_definition_distance": 1000000000,
+          "path_name_relevance": 1,
+          "range_size_penalty": 4,
+          "reference_count_in_range": 0,
           "search_score": 2.5
         },
         "source_query": "service run parser",
@@ -78,6 +84,11 @@
           "parser"
         ],
         "score_components": {
+          "definition_match": false,
+          "min_definition_distance": 1000000000,
+          "path_name_relevance": 0,
+          "range_size_penalty": 8,
+          "reference_count_in_range": 0,
           "search_score": 1.6
         },
         "source_query": "service run parser",

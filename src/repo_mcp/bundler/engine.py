@@ -44,6 +44,13 @@ class OutlineFn(Protocol):
         """Return adapter-agnostic outline symbol dictionaries for one path."""
 
 
+class ReferenceLookupFn(Protocol):
+    """Reference lookup callback for deterministic ranking signals."""
+
+    def __call__(self, symbol: str) -> list[dict[str, object]]:
+        """Return declaration-linked reference records for one symbol."""
+
+
 def build_context_bundle(
     prompt: str,
     budget: BundleBudget,
@@ -54,6 +61,7 @@ def build_context_bundle(
     strategy: str = "hybrid",
     top_k_per_query: int = 20,
     outline_fn: OutlineFn | None = None,
+    reference_lookup_fn: ReferenceLookupFn | None = None,
 ) -> BundleResult:
     """Build deterministic context bundle using multi-query search and budgets."""
     if budget.max_files < 1:
@@ -63,6 +71,7 @@ def build_context_bundle(
 
     prompt_fingerprint = _sha256_hex(prompt)
     queries = _build_queries(prompt)
+    prompt_terms = tuple(tokenize(prompt))
     raw_hits: list[_Hit] = []
     symbol_cache: dict[str, tuple[_SymbolRange, ...]] = {}
     for query in queries:
@@ -80,7 +89,11 @@ def build_context_bundle(
             raw_hits.append(candidate)
 
     deduped = _dedupe_hits(raw_hits)
-    ranked = sorted(deduped, key=lambda item: (-item.score, item.path, item.start_line))
+    ranked = _rank_hits(
+        deduped,
+        prompt_terms=prompt_terms,
+        reference_lookup_fn=reference_lookup_fn,
+    )
     selections, totals, budget_notes = _select_with_budget(ranked, budget, read_lines_fn)
     citations = tuple(
         BundleCitation(
@@ -169,6 +182,17 @@ class _Hit:
     source_query: str
     matched_terms: tuple[str, ...]
     aligned_symbol: str | None = None
+    ranking: _RankingSignals | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _RankingSignals:
+    definition_match: bool
+    reference_count_in_range: int
+    min_definition_distance: int
+    path_name_relevance: int
+    search_score: float
+    range_size_penalty: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,6 +218,131 @@ def _dedupe_hits(hits: list[_Hit]) -> list[_Hit]:
             best_by_key[key] = hit
     keys = sorted(best_by_key.keys(), key=lambda item: (item[0], item[1], item[2]))
     return [best_by_key[key] for key in keys]
+
+
+def _rank_hits(
+    hits: list[_Hit],
+    *,
+    prompt_terms: tuple[str, ...],
+    reference_lookup_fn: ReferenceLookupFn | None,
+) -> list[_Hit]:
+    reference_cache: dict[str, tuple[tuple[str, int], ...]] = {}
+    ranked_hits = [
+        replace(
+            hit,
+            ranking=_ranking_signals_for_hit(
+                hit,
+                prompt_terms=prompt_terms,
+                reference_lookup_fn=reference_lookup_fn,
+                reference_cache=reference_cache,
+            ),
+        )
+        for hit in hits
+    ]
+    return sorted(ranked_hits, key=_rank_sort_key)
+
+
+def _ranking_signals_for_hit(
+    hit: _Hit,
+    *,
+    prompt_terms: tuple[str, ...],
+    reference_lookup_fn: ReferenceLookupFn | None,
+    reference_cache: dict[str, tuple[tuple[str, int], ...]],
+) -> _RankingSignals:
+    prompt_term_set = set(prompt_terms)
+    aligned_tokens = set()
+    if hit.aligned_symbol is not None:
+        aligned_tokens = set(tokenize(hit.aligned_symbol.replace(".", " ")))
+    definition_match = bool(prompt_term_set & aligned_tokens)
+    reference_count_in_range = 0
+    min_definition_distance = 10**9
+    if reference_lookup_fn is not None and hit.aligned_symbol is not None:
+        references = reference_cache.get(hit.aligned_symbol)
+        if references is None:
+            references = _normalize_reference_pairs(reference_lookup_fn(hit.aligned_symbol))
+            reference_cache[hit.aligned_symbol] = references
+        reference_count_in_range, min_definition_distance = _reference_proximity_for_hit(
+            hit, references
+        )
+
+    return _RankingSignals(
+        definition_match=definition_match,
+        reference_count_in_range=reference_count_in_range,
+        min_definition_distance=min_definition_distance,
+        path_name_relevance=_path_name_relevance(hit.path, prompt_term_set),
+        search_score=hit.score,
+        range_size_penalty=max(0, hit.end_line - hit.start_line + 1),
+    )
+
+
+def _normalize_reference_pairs(records: list[dict[str, object]]) -> tuple[tuple[str, int], ...]:
+    pairs: list[tuple[str, int]] = []
+    for item in records:
+        if not isinstance(item, dict):
+            continue
+        path = item.get("path")
+        line = item.get("line")
+        if not isinstance(path, str):
+            continue
+        if not isinstance(line, int):
+            continue
+        if line < 1:
+            continue
+        pairs.append((path, line))
+    return tuple(sorted(pairs, key=lambda row: (row[0], row[1])))
+
+
+def _reference_proximity_for_hit(
+    hit: _Hit, references: tuple[tuple[str, int], ...]
+) -> tuple[int, int]:
+    count = 0
+    min_distance = 10**9
+    for path, line in references:
+        if path != hit.path:
+            continue
+        if hit.start_line <= line <= hit.end_line:
+            count += 1
+            min_distance = 0
+            continue
+        distance = min(abs(line - hit.start_line), abs(line - hit.end_line))
+        if distance < min_distance:
+            min_distance = distance
+    return count, min_distance
+
+
+def _path_name_relevance(path: str, prompt_terms: set[str]) -> int:
+    if not prompt_terms:
+        return 0
+    path_terms = set(tokenize(path.replace("/", " ").replace(".", " ")))
+    return len(path_terms & prompt_terms)
+
+
+def _rank_sort_key(hit: _Hit) -> tuple[object, ...]:
+    ranking = hit.ranking or _RankingSignals(
+        definition_match=False,
+        reference_count_in_range=0,
+        min_definition_distance=10**9,
+        path_name_relevance=0,
+        search_score=hit.score,
+        range_size_penalty=max(0, hit.end_line - hit.start_line + 1),
+    )
+    return (
+        -int(ranking.definition_match),
+        -ranking.reference_count_in_range,
+        ranking.min_definition_distance,
+        -ranking.path_name_relevance,
+        -ranking.search_score,
+        ranking.range_size_penalty,
+        hit.path,
+        hit.start_line,
+        hit.end_line,
+        hit.source_query,
+        _candidate_id(hit),
+    )
+
+
+def _candidate_id(hit: _Hit) -> str:
+    return f"{hit.path}:{hit.start_line}:{hit.end_line}:{hit.source_query}"
 
 
 def _align_hit_to_symbol_ranges(
@@ -336,11 +485,26 @@ def _build_why_selected(hit: _Hit) -> dict[str, object]:
     matched_signals = ["search_score"]
     if hit.matched_terms:
         matched_signals.append("matched_terms")
+    ranking = hit.ranking
+    if ranking is not None and ranking.definition_match:
+        matched_signals.append("definition_match")
+    if ranking is not None and ranking.reference_count_in_range > 0:
+        matched_signals.append("reference_proximity")
     if hit.aligned_symbol is not None:
         matched_signals.append("aligned_symbol")
+    score_components: dict[str, object] = {"search_score": hit.score}
+    if ranking is not None:
+        score_components = {
+            "search_score": ranking.search_score,
+            "definition_match": ranking.definition_match,
+            "reference_count_in_range": ranking.reference_count_in_range,
+            "min_definition_distance": ranking.min_definition_distance,
+            "path_name_relevance": ranking.path_name_relevance,
+            "range_size_penalty": ranking.range_size_penalty,
+        }
     return {
         "matched_signals": matched_signals,
-        "score_components": {"search_score": hit.score},
+        "score_components": score_components,
         "source_query": hit.source_query,
         "matched_terms": list(hit.matched_terms),
         "symbol_reference": hit.aligned_symbol,
