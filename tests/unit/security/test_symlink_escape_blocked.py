@@ -11,7 +11,10 @@ def test_symlink_escape_is_blocked(tmp_path: Path) -> None:
     outside = tmp_path.parent / "outside-target"
     outside.mkdir(exist_ok=True)
     (outside / "leak.txt").write_text("secret", encoding="utf-8")
-    (tmp_path / "link").symlink_to(outside, target_is_directory=True)
+    try:
+        (tmp_path / "link").symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlink creation requires elevated privileges or Developer Mode on Windows")
 
     with pytest.raises(PathBlockedError) as error:
         resolve_repo_path(repo_root=tmp_path, candidate="link/leak.txt")
