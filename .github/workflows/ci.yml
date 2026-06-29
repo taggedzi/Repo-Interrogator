@@ -23,76 +23,69 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        run: |
+          git init
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          git fetch --depth=1 origin ${{ github.sha }}
+          git checkout FETCH_HEAD
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
+      - name: Select Python
+        run: echo "PYTHON=python${{ matrix.python-version }}" >> "$GITHUB_ENV"
 
       - name: Install Tooling
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install ruff mypy pytest build
+          $PYTHON -m pip install --upgrade pip
+          $PYTHON -m pip install ruff mypy pytest build
 
       - name: Ruff Format Check
-        run: python -m ruff format --check .
+        run: $PYTHON -m ruff format --check .
 
       - name: Ruff Lint
-        run: python -m ruff check .
+        run: $PYTHON -m ruff check .
 
       - name: Type Check
-        run: python -m mypy src
+        run: $PYTHON -m mypy src
 
       - name: Test
-        run: python -m pytest -q
+        run: $PYTHON -m pytest -q
 
       - name: Build Artifacts
-        run: python -m build
+        run: $PYTHON -m build
 
       - name: Install Wheel Smoke Test
         run: |
-          python -m pip uninstall -y repo-interrogator || true
-          python -m pip install dist/*.whl
-          python -c "import repo_mcp, repo_mcp.server; print('ok')"
+          $PYTHON -m pip uninstall -y repo-interrogator || true
+          $PYTHON -m pip install dist/*.whl
+          $PYTHON -c "import repo_mcp, repo_mcp.server; print('ok')"
 
       - name: Install Sdist Smoke Test
         run: |
-          python -m pip uninstall -y repo-interrogator || true
-          python -m pip install dist/*.tar.gz
-          python -c "import repo_mcp, repo_mcp.server; print('ok')"
+          $PYTHON -m pip uninstall -y repo-interrogator || true
+          $PYTHON -m pip install dist/*.tar.gz
+          $PYTHON -c "import repo_mcp, repo_mcp.server; print('ok')"
 
   perf-guardrails:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_perf_guardrails }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+        run: |
+          git init
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          git fetch --depth=1 origin ${{ github.sha }}
+          git checkout FETCH_HEAD
 
       - name: Install Tooling
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install ruff mypy pytest
+          python3.12 -m pip install --upgrade pip
+          python3.12 -m pip install ruff mypy pytest
 
       - name: Perf Guardrail Check (optional, warning-only drift)
         run: |
-          python scripts/perf_guardrail_check.py \
+          python3.12 scripts/perf_guardrail_check.py \
             --repo-root . \
             --baseline .repo_mcp/perf/baselines/ci-self.json \
             --scenarios self \
             --runs 1 \
             --threshold-percent 20 \
             --bootstrap-if-missing
-
-      - name: Upload Perf Artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: perf-guardrails
-          path: .repo_mcp/perf
-          if-no-files-found: ignore

@@ -22,51 +22,48 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+        run: |
+          git clone "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" .
+          git checkout ${{ github.sha }}
 
       - name: Install Build Tooling
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install build
+          python3.12 -m pip install --upgrade pip
+          python3.12 -m pip install build
 
       - name: Build Artifacts
-        run: python -m build
+        run: python3.12 -m build
 
       - name: Generate Deterministic Release Notes
         run: |
-          python scripts/generate_release_notes.py \
+          python3.12 scripts/generate_release_notes.py \
             --repo-root . \
             --to-ref "${GITHUB_SHA}" \
             --output .repo_mcp/release_notes.md
 
       - name: Artifact Import Smoke Test (Wheel)
         run: |
-          python -m pip install dist/*.whl
-          python -c "import repo_mcp, repo_mcp.server; print('wheel import ok')"
+          python3.12 -m pip install dist/*.whl
+          python3.12 -c "import repo_mcp, repo_mcp.server; print('wheel import ok')"
 
       - name: Artifact Import Smoke Test (Sdist)
         run: |
-          python -m pip uninstall -y repo-interrogator || true
-          python -m pip install dist/*.tar.gz
-          python -c "import repo_mcp, repo_mcp.server; print('sdist import ok')"
+          python3.12 -m pip uninstall -y repo-interrogator || true
+          python3.12 -m pip install dist/*.tar.gz
+          python3.12 -c "import repo_mcp, repo_mcp.server; print('sdist import ok')"
 
       - name: Create GitHub Release and Upload Artifacts
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/*.whl
-            dist/*.tar.gz
-          body_path: .repo_mcp/release_notes.md
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            dist/*.whl dist/*.tar.gz \
+            --title "${{ github.ref_name }}" \
+            --notes-file .repo_mcp/release_notes.md
 
       - name: Optional PyPI Publish (Guarded)
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.publish_to_pypi == 'true') || (github.event_name == 'push' && vars.PUBLISH_PYPI == 'true') }}
@@ -74,6 +71,6 @@ jobs:
           TWINE_USERNAME: "__token__"
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          python -m pip install twine
-          python -m twine check dist/*
-          python -m twine upload dist/*
+          python3.12 -m pip install twine
+          python3.12 -m twine check dist/*
+          python3.12 -m twine upload dist/*
