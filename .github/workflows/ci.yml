@@ -30,7 +30,14 @@ jobs:
           git checkout FETCH_HEAD
 
       - name: Select Python
-        run: echo "PYTHON=python${{ matrix.python-version }}" >> "$GITHUB_ENV"
+        run: |
+          PYTHON_DIR=$(ls -d /opt/hostedtoolcache/Python/${{ matrix.python-version }}.*/x64 2>/dev/null | sort -V | tail -1)
+          if [ -z "$PYTHON_DIR" ]; then
+            echo "Python ${{ matrix.python-version }} not found in tool cache" >&2
+            exit 1
+          fi
+          echo "$PYTHON_DIR/bin" >> "$GITHUB_PATH"
+          echo "PYTHON=$PYTHON_DIR/bin/python3" >> "$GITHUB_ENV"
 
       - name: Install Tooling
         run: |
@@ -77,12 +84,12 @@ jobs:
 
       - name: Install Tooling
         run: |
-          python3.12 -m pip install --upgrade pip
-          python3.12 -m pip install ruff mypy pytest
+          python3 -m pip install --upgrade pip
+          python3 -m pip install ruff mypy pytest
 
       - name: Perf Guardrail Check (optional, warning-only drift)
         run: |
-          python3.12 scripts/perf_guardrail_check.py \
+          python3 scripts/perf_guardrail_check.py \
             --repo-root . \
             --baseline .repo_mcp/perf/baselines/ci-self.json \
             --scenarios self \

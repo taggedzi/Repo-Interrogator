@@ -33,29 +33,29 @@ jobs:
 
       - name: Install Build Tooling
         run: |
-          python3.12 -m pip install --upgrade pip
-          python3.12 -m pip install build
+          python3 -m pip install --upgrade pip
+          python3 -m pip install build
 
       - name: Build Artifacts
-        run: python3.12 -m build
+        run: python3 -m build
 
       - name: Generate Deterministic Release Notes
         run: |
-          python3.12 scripts/generate_release_notes.py \
+          python3 scripts/generate_release_notes.py \
             --repo-root . \
             --to-ref "${GITHUB_SHA}" \
             --output .repo_mcp/release_notes.md
 
       - name: Artifact Import Smoke Test (Wheel)
         run: |
-          python3.12 -m pip install dist/*.whl
-          python3.12 -c "import repo_mcp, repo_mcp.server; print('wheel import ok')"
+          python3 -m pip install dist/*.whl
+          python3 -c "import repo_mcp, repo_mcp.server; print('wheel import ok')"
 
       - name: Artifact Import Smoke Test (Sdist)
         run: |
-          python3.12 -m pip uninstall -y repo-interrogator || true
-          python3.12 -m pip install dist/*.tar.gz
-          python3.12 -c "import repo_mcp, repo_mcp.server; print('sdist import ok')"
+          python3 -m pip uninstall -y repo-interrogator || true
+          python3 -m pip install dist/*.tar.gz
+          python3 -c "import repo_mcp, repo_mcp.server; print('sdist import ok')"
 
       - name: Create GitHub Release and Upload Artifacts
         if: startsWith(github.ref, 'refs/tags/')
@@ -73,6 +73,6 @@ jobs:
           TWINE_USERNAME: "__token__"
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          python3.12 -m pip install twine
-          python3.12 -m twine check dist/*
-          python3.12 -m twine upload dist/*
+          python3 -m pip install twine
+          python3 -m twine check dist/*
+          python3 -m twine upload dist/*
