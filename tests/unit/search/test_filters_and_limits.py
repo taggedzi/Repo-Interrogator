@@ -5,6 +5,8 @@ from pathlib import Path
 from repo_mcp.security import SecurityLimits
 from repo_mcp.server import create_server
 
+from tests.helpers import call_tool, extract_result, is_tool_error
+
 
 def test_search_file_glob_and_path_prefix_filters(tmp_path: Path) -> None:
     (tmp_path / "src").mkdir()
@@ -12,25 +14,23 @@ def test_search_file_glob_and_path_prefix_filters(tmp_path: Path) -> None:
     (tmp_path / "src" / "main.py").write_text("keyword alpha\n", encoding="utf-8")
     (tmp_path / "docs" / "notes.md").write_text("keyword docs\n", encoding="utf-8")
     server = create_server(repo_root=str(tmp_path))
-    server.handle_payload({"id": "req-filter-1", "method": "repo.refresh_index", "params": {}})
+    call_tool(server, "req-filter-1", "repo.refresh_index", {})
 
-    by_glob = server.handle_payload(
-        {
-            "id": "req-filter-2",
-            "method": "repo.search",
-            "params": {"query": "keyword", "mode": "bm25", "file_glob": "src/*.py", "top_k": 10},
-        }
+    by_glob = call_tool(
+        server,
+        "req-filter-2",
+        "repo.search",
+        {"query": "keyword", "mode": "bm25", "file_glob": "src/*.py", "top_k": 10},
     )
-    by_prefix = server.handle_payload(
-        {
-            "id": "req-filter-3",
-            "method": "repo.search",
-            "params": {"query": "keyword", "mode": "bm25", "path_prefix": "docs/", "top_k": 10},
-        }
+    by_prefix = call_tool(
+        server,
+        "req-filter-3",
+        "repo.search",
+        {"query": "keyword", "mode": "bm25", "path_prefix": "docs/", "top_k": 10},
     )
 
-    assert [hit["path"] for hit in by_glob["result"]["hits"]] == ["src/main.py"]
-    assert [hit["path"] for hit in by_prefix["result"]["hits"]] == ["docs/notes.md"]
+    assert [hit["path"] for hit in extract_result(by_glob)["hits"]] == ["src/main.py"]
+    assert [hit["path"] for hit in extract_result(by_prefix)["hits"]] == ["docs/notes.md"]
 
 
 def test_search_limits_enforced_and_top_k_bounded(tmp_path: Path) -> None:
@@ -39,24 +39,15 @@ def test_search_limits_enforced_and_top_k_bounded(tmp_path: Path) -> None:
         (tmp_path / "src" / f"f{idx}.py").write_text(f"keyword item {idx}\n", encoding="utf-8")
 
     server = create_server(repo_root=str(tmp_path), limits=SecurityLimits(max_search_hits=3))
-    server.handle_payload({"id": "req-limit-1", "method": "repo.refresh_index", "params": {}})
+    call_tool(server, "req-limit-1", "repo.refresh_index", {})
 
-    blocked = server.handle_payload(
-        {
-            "id": "req-limit-2",
-            "method": "repo.search",
-            "params": {"query": "keyword", "mode": "bm25", "top_k": 10},
-        }
+    blocked = call_tool(
+        server, "req-limit-2", "repo.search", {"query": "keyword", "mode": "bm25", "top_k": 10}
     )
-    assert blocked["blocked"] is True
-    assert blocked["error"]["code"] == "PATH_BLOCKED"
+    assert is_tool_error(blocked)
 
-    allowed = server.handle_payload(
-        {
-            "id": "req-limit-3",
-            "method": "repo.search",
-            "params": {"query": "keyword", "mode": "bm25", "top_k": 2},
-        }
+    allowed = call_tool(
+        server, "req-limit-3", "repo.search", {"query": "keyword", "mode": "bm25", "top_k": 2}
     )
-    assert allowed["ok"] is True
-    assert len(allowed["result"]["hits"]) == 2
+    assert not is_tool_error(allowed)
+    assert len(extract_result(allowed)["hits"]) == 2

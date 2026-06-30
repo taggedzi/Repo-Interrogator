@@ -106,8 +106,7 @@ TOOL_SCHEMAS: dict[str, dict[str, object]] = {
                 "file_glob": {
                     "type": "string",
                     "description": (
-                        "Glob pattern to restrict search to matching files "
-                        "(e.g. 'src/**/*.py')."
+                        "Glob pattern to restrict search to matching files (e.g. 'src/**/*.py')."
                     ),
                 },
                 "path_prefix": {

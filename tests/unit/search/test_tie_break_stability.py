@@ -4,6 +4,8 @@ from pathlib import Path
 
 from repo_mcp.server import create_server
 
+from tests.helpers import call_tool, extract_result
+
 
 def test_tie_break_uses_path_then_start_line(tmp_path: Path) -> None:
     (tmp_path / "a").mkdir()
@@ -12,25 +14,17 @@ def test_tie_break_uses_path_then_start_line(tmp_path: Path) -> None:
     (tmp_path / "a" / "same.py").write_text(text, encoding="utf-8")
     (tmp_path / "b" / "same.py").write_text(text, encoding="utf-8")
     server = create_server(repo_root=str(tmp_path))
-    server.handle_payload({"id": "req-tie-1", "method": "repo.refresh_index", "params": {}})
+    call_tool(server, "req-tie-1", "repo.refresh_index", {})
 
-    first = server.handle_payload(
-        {
-            "id": "req-tie-2",
-            "method": "repo.search",
-            "params": {"query": "keyword", "mode": "bm25", "top_k": 10},
-        }
+    first = call_tool(
+        server, "req-tie-2", "repo.search", {"query": "keyword", "mode": "bm25", "top_k": 10}
     )
-    second = server.handle_payload(
-        {
-            "id": "req-tie-3",
-            "method": "repo.search",
-            "params": {"query": "keyword", "mode": "bm25", "top_k": 10},
-        }
+    second = call_tool(
+        server, "req-tie-3", "repo.search", {"query": "keyword", "mode": "bm25", "top_k": 10}
     )
 
-    first_hits = first["result"]["hits"]
-    second_hits = second["result"]["hits"]
+    first_hits = extract_result(first)["hits"]
+    second_hits = extract_result(second)["hits"]
     assert [h["path"] for h in first_hits] == [h["path"] for h in second_hits]
     assert [h["start_line"] for h in first_hits] == [h["start_line"] for h in second_hits]
     assert first_hits[0]["path"] == "a/same.py"

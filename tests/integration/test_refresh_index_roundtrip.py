@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from repo_mcp.server import create_server
+from tests.helpers import call_tool, extract_result, is_tool_error
 
 
 def test_refresh_index_roundtrip_and_status_snapshot(tmp_path: Path) -> None:
@@ -11,34 +12,28 @@ def test_refresh_index_roundtrip_and_status_snapshot(tmp_path: Path) -> None:
     (tmp_path / "README.md").write_text("# Title\n", encoding="utf-8")
     server = create_server(repo_root=str(tmp_path))
 
-    first = server.handle_payload(
-        {"id": "req-r1", "method": "repo.refresh_index", "params": {"force": False}}
-    )
-    assert first["ok"] is True
-    assert first["result"]["added"] == 2
-    assert first["result"]["updated"] == 0
-    assert first["result"]["removed"] == 0
-    assert isinstance(first["result"]["timestamp"], str)
+    first = call_tool(server, "req-r1", "repo.refresh_index", {"force": False})
+    assert not is_tool_error(first)
+    assert extract_result(first)["added"] == 2
+    assert extract_result(first)["updated"] == 0
+    assert extract_result(first)["removed"] == 0
+    assert isinstance(extract_result(first)["timestamp"], str)
 
-    status = server.handle_payload({"id": "req-r2", "method": "repo.status", "params": {}})
-    assert status["ok"] is True
-    assert status["result"]["index_status"] == "ready"
-    assert status["result"]["indexed_file_count"] == 2
-    assert status["result"]["chunking_summary"]["indexed_chunk_count"] >= 2
+    status = call_tool(server, "req-r2", "repo.status", {})
+    assert not is_tool_error(status)
+    assert extract_result(status)["index_status"] == "ready"
+    assert extract_result(status)["indexed_file_count"] == 2
+    assert extract_result(status)["chunking_summary"]["indexed_chunk_count"] >= 2
 
-    second = server.handle_payload(
-        {"id": "req-r3", "method": "repo.refresh_index", "params": {"force": False}}
-    )
-    assert second["ok"] is True
-    assert second["result"]["added"] == 0
-    assert second["result"]["updated"] == 0
-    assert second["result"]["removed"] == 0
+    second = call_tool(server, "req-r3", "repo.refresh_index", {"force": False})
+    assert not is_tool_error(second)
+    assert extract_result(second)["added"] == 0
+    assert extract_result(second)["updated"] == 0
+    assert extract_result(second)["removed"] == 0
 
     (tmp_path / "src" / "a.py").write_text("print('a changed')\n", encoding="utf-8")
-    third = server.handle_payload(
-        {"id": "req-r4", "method": "repo.refresh_index", "params": {"force": False}}
-    )
-    assert third["ok"] is True
-    assert third["result"]["added"] == 0
-    assert third["result"]["updated"] == 1
-    assert third["result"]["removed"] == 0
+    third = call_tool(server, "req-r4", "repo.refresh_index", {"force": False})
+    assert not is_tool_error(third)
+    assert extract_result(third)["added"] == 0
+    assert extract_result(third)["updated"] == 1
+    assert extract_result(third)["removed"] == 0
