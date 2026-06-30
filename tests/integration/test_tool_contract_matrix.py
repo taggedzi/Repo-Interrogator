@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.helpers import call_tool, extract_result, is_tool_error
+
 from repo_mcp.server import create_server
 
 
@@ -15,7 +17,10 @@ def test_tool_contract_matrix_for_required_v1_tools(tmp_path: Path) -> None:
     (tmp_path / "docs" / "guide.md").write_text("search term\n", encoding="utf-8")
     server = create_server(repo_root=str(tmp_path))
 
-    requests = [
+    # Seed index for search/bundle
+    call_tool(server, "req-matrix-seed", "repo.refresh_index", {"force": False})
+
+    tool_calls: list[tuple[str, dict[str, object]]] = [
         ("repo.status", {}),
         ("repo.list_files", {"max_results": 10}),
         ("repo.open_file", {"path": "src/main.py", "start_line": 1, "end_line": 3}),
@@ -35,21 +40,19 @@ def test_tool_contract_matrix_for_required_v1_tools(tmp_path: Path) -> None:
         ("repo.audit_log", {"limit": 20}),
     ]
 
-    for idx, (method, params) in enumerate(requests):
-        response = server.handle_payload(
-            {"id": f"req-matrix-{idx}", "method": method, "params": params}
-        )
-        assert set(response.keys()) >= {"request_id", "ok", "result", "warnings", "blocked"}
-        assert response["request_id"] == f"req-matrix-{idx}"
-        assert isinstance(response["warnings"], list)
-        if method == "repo.search":
-            assert response["ok"] is True
-            assert "hits" in response["result"]
-        if method == "repo.outline":
-            assert response["ok"] is True
-            assert set(response["result"].keys()) == {"path", "language", "symbols"}
-            assert response["result"]["symbols"]
-            assert set(response["result"]["symbols"][0].keys()) == {
+    for idx, (tool_name, arguments) in enumerate(tool_calls):
+        response = call_tool(server, f"req-matrix-{idx}", tool_name, arguments)
+        assert response["jsonrpc"] == "2.0"
+        assert response["id"] == f"req-matrix-{idx}"
+        assert not is_tool_error(response), f"{tool_name} returned isError: {response}"
+        result = extract_result(response)
+
+        if tool_name == "repo.search":
+            assert "hits" in result
+        if tool_name == "repo.outline":
+            assert set(result.keys()) == {"path", "language", "symbols"}
+            assert result["symbols"]
+            assert set(result["symbols"][0].keys()) == {
                 "kind",
                 "name",
                 "signature",
@@ -61,9 +64,8 @@ def test_tool_contract_matrix_for_required_v1_tools(tmp_path: Path) -> None:
                 "is_conditional",
                 "decl_context",
             }
-        if method == "repo.build_context_bundle":
-            assert response["ok"] is True
-            assert set(response["result"].keys()) == {
+        if tool_name == "repo.build_context_bundle":
+            assert set(result.keys()) == {
                 "bundle_id",
                 "prompt_fingerprint",
                 "strategy",
@@ -73,7 +75,7 @@ def test_tool_contract_matrix_for_required_v1_tools(tmp_path: Path) -> None:
                 "citations",
                 "audit",
             }
-            selections = response["result"]["selections"]
+            selections = result["selections"]
             assert isinstance(selections, list)
             if selections:
                 first = selections[0]
@@ -87,9 +89,8 @@ def test_tool_contract_matrix_for_required_v1_tools(tmp_path: Path) -> None:
                     "score",
                     "source_query",
                 }
-        if method == "repo.references":
-            assert response["ok"] is True
-            assert set(response["result"].keys()) == {
+        if tool_name == "repo.references":
+            assert set(result.keys()) == {
                 "symbol",
                 "references",
                 "truncated",

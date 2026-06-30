@@ -162,25 +162,25 @@ def _outline_for_path(path: str) -> list[dict[str, object]]:
         return [
             {
                 "kind": "method",
-                "name": "StdioServer.parse_request",
+                "name": "StdioServer.handle_payload",
                 "start_line": 252,
                 "end_line": 278,
             },
             {
                 "kind": "method",
-                "name": "StdioServer.extract_request_id",
+                "name": "StdioServer.jsonrpc_result",
                 "start_line": 280,
                 "end_line": 286,
             },
             {
                 "kind": "method",
-                "name": "StdioServer.next_request_id",
+                "name": "StdioServer.jsonrpc_error",
                 "start_line": 288,
                 "end_line": 291,
             },
             {
                 "kind": "method",
-                "name": "StdioServer.blocked_response",
+                "name": "StdioServer.tool_error_content",
                 "start_line": 321,
                 "end_line": 330,
             },
@@ -202,7 +202,7 @@ def _reference_pairs(
 ) -> RefPairs:
     output: RefPairs = {}
     for symbol in sorted(symbol_paths.keys()):
-        if symbol == "StdioServer.next_request_id":
+        if symbol == "StdioServer.jsonrpc_error":
             output[symbol] = (
                 ("src/repo_mcp/server.py", 289),
                 ("src/repo_mcp/server.py", 291),

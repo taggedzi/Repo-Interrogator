@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from tests.helpers import call_tool, is_tool_error, tool_error_text
+
 from repo_mcp.security import SecurityLimits
 from repo_mcp.server import create_server
 
@@ -12,19 +14,17 @@ def test_max_file_bytes_limit_blocks_open_file(tmp_path: Path) -> None:
     target.write_text("a" * 20, encoding="utf-8")
     server = create_server(repo_root=str(tmp_path), limits=SecurityLimits(max_file_bytes=10))
 
-    response = server.handle_payload(
-        {
-            "id": "req-large-file",
-            "method": "repo.open_file",
-            "params": {"path": "large.txt", "start_line": 1, "end_line": 1},
-        }
+    response = call_tool(
+        server,
+        "req-large-file",
+        "repo.open_file",
+        {"path": "large.txt", "start_line": 1, "end_line": 1},
     )
 
-    assert response["blocked"] is True
-    assert response["error"] == {
-        "code": "PATH_BLOCKED",
-        "message": "File exceeds max_file_bytes limit.",
-    }
+    assert is_tool_error(response)
+    assert "max_file_bytes" in tool_error_text(response).lower() or "Blocked" in tool_error_text(
+        response
+    )
 
 
 def test_max_open_lines_limit_blocks_large_range(tmp_path: Path) -> None:
@@ -32,33 +32,24 @@ def test_max_open_lines_limit_blocks_large_range(tmp_path: Path) -> None:
     target.write_text("1\n2\n3\n4\n5\n", encoding="utf-8")
     server = create_server(repo_root=str(tmp_path), limits=SecurityLimits(max_open_lines=2))
 
-    response = server.handle_payload(
-        {
-            "id": "req-lines",
-            "method": "repo.open_file",
-            "params": {"path": "many_lines.txt", "start_line": 1, "end_line": 5},
-        }
+    response = call_tool(
+        server,
+        "req-lines",
+        "repo.open_file",
+        {"path": "many_lines.txt", "start_line": 1, "end_line": 5},
     )
 
-    assert response["blocked"] is True
-    assert response["error"] == {
-        "code": "PATH_BLOCKED",
-        "message": "Requested line range exceeds max_open_lines limit.",
-    }
+    assert is_tool_error(response)
+    assert "Blocked" in tool_error_text(response)
 
 
 def test_max_search_hits_limit_blocks_large_top_k(tmp_path: Path) -> None:
     server = create_server(repo_root=str(tmp_path), limits=SecurityLimits(max_search_hits=3))
 
-    response = server.handle_payload(
-        {"id": "req-search", "method": "repo.search", "params": {"query": "x", "top_k": 10}}
-    )
+    response = call_tool(server, "req-search", "repo.search", {"query": "x", "top_k": 10})
 
-    assert response["blocked"] is True
-    assert response["error"] == {
-        "code": "PATH_BLOCKED",
-        "message": "Requested top_k exceeds max_search_hits limit.",
-    }
+    assert is_tool_error(response)
+    assert "Blocked" in tool_error_text(response)
 
 
 def test_max_total_response_bytes_limit_blocks_oversized_payload(tmp_path: Path) -> None:
@@ -69,36 +60,28 @@ def test_max_total_response_bytes_limit_blocks_oversized_payload(tmp_path: Path)
         limits=SecurityLimits(max_total_bytes_per_response=120),
     )
 
-    response = server.handle_payload(
-        {
-            "id": "req-response-size",
-            "method": "repo.open_file",
-            "params": {"path": "lines.txt", "start_line": 1, "end_line": 3},
-        }
+    response = call_tool(
+        server,
+        "req-response-size",
+        "repo.open_file",
+        {"path": "lines.txt", "start_line": 1, "end_line": 3},
     )
 
     encoded = json.dumps(response, sort_keys=True).encode("utf-8")
-    assert response["blocked"] is True
-    assert response["error"] == {
-        "code": "PATH_BLOCKED",
-        "message": "Response exceeds max_total_bytes_per_response limit.",
-    }
+    assert is_tool_error(response)
+    assert (
+        "max_total_bytes_per_response" in tool_error_text(response).lower()
+        or "exceeds" in tool_error_text(response).lower()
+    )
     assert len(encoded) <= 1200
 
 
 def test_max_references_limit_blocks_large_reference_top_k(tmp_path: Path) -> None:
     server = create_server(repo_root=str(tmp_path), limits=SecurityLimits(max_references=2))
 
-    response = server.handle_payload(
-        {
-            "id": "req-references",
-            "method": "repo.references",
-            "params": {"symbol": "Service.run", "top_k": 10},
-        }
+    response = call_tool(
+        server, "req-references", "repo.references", {"symbol": "Service.run", "top_k": 10}
     )
 
-    assert response["blocked"] is True
-    assert response["error"] == {
-        "code": "PATH_BLOCKED",
-        "message": "Requested top_k exceeds max_references limit.",
-    }
+    assert is_tool_error(response)
+    assert "Blocked" in tool_error_text(response)

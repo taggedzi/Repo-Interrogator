@@ -27,8 +27,8 @@
       "src/repo_mcp/server.py"
     ],
     "selected_symbols": [
-      "StdioServer.next_request_id",
-      "StdioServer.extract_request_id"
+      "StdioServer.jsonrpc_error",
+      "StdioServer.jsonrpc_result"
     ],
     "top_ranked_paths": [
       "src/repo_mcp/server.py",

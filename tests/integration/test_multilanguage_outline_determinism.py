@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.helpers import call_tool, extract_result, is_tool_error
+
 from repo_mcp.server import create_server
 
 
@@ -48,35 +50,19 @@ def test_multilanguage_outline_is_stable_across_repeated_and_path_style_calls(
     for index, rel_path in enumerate(sorted(files.keys()), start=1):
         windows_path = rel_path.replace("/", "\\")
 
-        first = server.handle_payload(
-            {
-                "id": f"req-multi-det-{index}-a",
-                "method": "repo.outline",
-                "params": {"path": rel_path},
-            }
-        )
-        second = server.handle_payload(
-            {
-                "id": f"req-multi-det-{index}-b",
-                "method": "repo.outline",
-                "params": {"path": rel_path},
-            }
-        )
-        windows = server.handle_payload(
-            {
-                "id": f"req-multi-det-{index}-c",
-                "method": "repo.outline",
-                "params": {"path": windows_path},
-            }
+        first = call_tool(server, f"req-multi-det-{index}-a", "repo.outline", {"path": rel_path})
+        second = call_tool(server, f"req-multi-det-{index}-b", "repo.outline", {"path": rel_path})
+        windows = call_tool(
+            server, f"req-multi-det-{index}-c", "repo.outline", {"path": windows_path}
         )
 
-        assert first["ok"] is True
-        assert second["ok"] is True
-        assert windows["ok"] is True
+        assert not is_tool_error(first)
+        assert not is_tool_error(second)
+        assert not is_tool_error(windows)
 
-        assert first["result"]["language"] == expected_language[rel_path]
-        assert second["result"]["language"] == expected_language[rel_path]
-        assert windows["result"]["language"] == expected_language[rel_path]
+        assert extract_result(first)["language"] == expected_language[rel_path]
+        assert extract_result(second)["language"] == expected_language[rel_path]
+        assert extract_result(windows)["language"] == expected_language[rel_path]
 
-        assert first["result"] == second["result"]
-        assert first["result"] == windows["result"]
+        assert extract_result(first) == extract_result(second)
+        assert extract_result(first) == extract_result(windows)

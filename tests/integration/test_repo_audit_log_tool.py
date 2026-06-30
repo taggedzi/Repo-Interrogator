@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.helpers import call_tool, extract_result
+
 from repo_mcp.server import create_server
 
 
@@ -10,27 +12,13 @@ def test_repo_audit_log_returns_recent_sanitized_entries(tmp_path: Path) -> None
     file_path = tmp_path / "app.py"
     file_path.write_text("print('hello')\n", encoding="utf-8")
 
-    server.handle_payload({"id": "req-300", "method": "repo.status", "params": {}})
-    server.handle_payload(
-        {
-            "id": "req-301",
-            "method": "repo.open_file",
-            "params": {"path": "app.py", "start_line": 1, "end_line": 1},
-        }
+    call_tool(server, "req-300", "repo.status", {})
+    call_tool(
+        server, "req-301", "repo.open_file", {"path": "app.py", "start_line": 1, "end_line": 1}
     )
 
-    response = server.handle_payload(
-        {
-            "id": "req-302",
-            "method": "repo.audit_log",
-            "params": {"limit": 2},
-        }
-    )
+    result = extract_result(call_tool(server, "req-302", "repo.audit_log", {"limit": 2}))
 
-    assert response["ok"] is True
-    assert response["blocked"] is False
-    result = response["result"]
-    assert isinstance(result, dict)
     entries = result["entries"]
     assert isinstance(entries, list)
     assert len(entries) == 2
@@ -48,14 +36,10 @@ def test_repo_audit_log_returns_recent_sanitized_entries(tmp_path: Path) -> None
 
 def test_repo_audit_log_since_filter(tmp_path: Path) -> None:
     server = create_server(repo_root=str(tmp_path))
-    server.handle_payload({"id": "req-400", "method": "repo.status", "params": {}})
-    response = server.handle_payload(
-        {
-            "id": "req-401",
-            "method": "repo.audit_log",
-            "params": {"since": "9999-01-01T00:00:00.000Z"},
-        }
+    call_tool(server, "req-400", "repo.status", {})
+
+    result = extract_result(
+        call_tool(server, "req-401", "repo.audit_log", {"since": "9999-01-01T00:00:00.000Z"})
     )
 
-    entries = response["result"]["entries"]
-    assert entries == []
+    assert result["entries"] == []

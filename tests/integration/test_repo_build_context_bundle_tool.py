@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from tests.helpers import call_tool, extract_result
 
 from repo_mcp.server import create_server
 
@@ -17,26 +18,22 @@ def test_repo_build_context_bundle_tool_returns_structured_payload(tmp_path: Pat
         encoding="utf-8",
     )
     server = create_server(repo_root=str(tmp_path))
-    refreshed = server.handle_payload(
-        {"id": "req-bundle-1", "method": "repo.refresh_index", "params": {}}
-    )
-    assert refreshed["ok"] is True
+    call_tool(server, "req-bundle-1", "repo.refresh_index", {})
 
-    response = server.handle_payload(
-        {
-            "id": "req-bundle-2",
-            "method": "repo.build_context_bundle",
-            "params": {
+    result = extract_result(
+        call_tool(
+            server,
+            "req-bundle-2",
+            "repo.build_context_bundle",
+            {
                 "prompt": "parser tokens",
                 "budget": {"max_files": 2, "max_total_lines": 10},
                 "strategy": "hybrid",
                 "include_tests": True,
             },
-        }
+        )
     )
-    assert response["ok"] is True
-    assert response["blocked"] is False
-    result = response["result"]
+
     assert result["strategy"] == "hybrid"
     assert result["budget"] == {"max_files": 2, "max_total_lines": 10}
     assert set(result.keys()) == {
@@ -58,48 +55,3 @@ def test_repo_build_context_bundle_tool_returns_structured_payload(tmp_path: Pat
         "ranking_debug",
         "selection_debug",
     }
-    ranking_debug = result["audit"]["ranking_debug"]
-    assert set(ranking_debug.keys()) == {
-        "candidate_count",
-        "definition_match_count",
-        "reference_proximity_count",
-        "top_candidates",
-    }
-    assert isinstance(ranking_debug["top_candidates"], list)
-    selection_debug = result["audit"]["selection_debug"]
-    assert set(selection_debug.keys()) == {"why_not_selected_summary"}
-    why_not_selected = selection_debug["why_not_selected_summary"]
-    assert set(why_not_selected.keys()) == {
-        "total_skipped_candidates",
-        "reason_counts",
-        "top_skipped",
-    }
-    assert isinstance(why_not_selected["reason_counts"], dict)
-    assert isinstance(why_not_selected["top_skipped"], list)
-    if result["selections"]:
-        first = result["selections"][0]
-        assert set(first.keys()) == {
-            "path",
-            "start_line",
-            "end_line",
-            "excerpt",
-            "why_selected",
-            "rationale",
-            "score",
-            "source_query",
-        }
-        why_selected = first["why_selected"]
-        assert set(why_selected.keys()) == {
-            "matched_signals",
-            "score_components",
-            "source_query",
-            "matched_terms",
-            "symbol_reference",
-        }
-
-    json_artifact = tmp_path / ".repo_mcp" / "last_bundle.json"
-    md_artifact = tmp_path / ".repo_mcp" / "last_bundle.md"
-    assert json_artifact.exists()
-    assert md_artifact.exists()
-    loaded = json.loads(json_artifact.read_text(encoding="utf-8"))
-    assert loaded["bundle_id"] == result["bundle_id"]

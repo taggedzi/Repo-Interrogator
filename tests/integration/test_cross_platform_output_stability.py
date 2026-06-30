@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.helpers import call_tool, extract_result, is_tool_error
+
 from repo_mcp.server import create_server
 
 
@@ -17,58 +19,48 @@ def test_cross_platform_style_inputs_produce_stable_outputs(tmp_path: Path) -> N
         encoding="utf-8",
     )
     server = create_server(repo_root=str(tmp_path))
-    server.handle_payload({"id": "req-cross-1", "method": "repo.refresh_index", "params": {}})
+    call_tool(server, "req-cross-1", "repo.refresh_index", {})
 
-    open_posix = server.handle_payload(
-        {
-            "id": "req-cross-2",
-            "method": "repo.open_file",
-            "params": {"path": "src/mod.py", "start_line": 1, "end_line": 5},
-        }
+    open_posix = call_tool(
+        server,
+        "req-cross-2",
+        "repo.open_file",
+        {"path": "src/mod.py", "start_line": 1, "end_line": 5},
     )
-    open_windows = server.handle_payload(
-        {
-            "id": "req-cross-3",
-            "method": "repo.open_file",
-            "params": {"path": r"src\mod.py", "start_line": 1, "end_line": 5},
-        }
+    open_windows = call_tool(
+        server,
+        "req-cross-3",
+        "repo.open_file",
+        {"path": r"src\mod.py", "start_line": 1, "end_line": 5},
     )
 
-    outline_posix = server.handle_payload(
-        {"id": "req-cross-4", "method": "repo.outline", "params": {"path": "src/mod.py"}}
-    )
-    outline_windows = server.handle_payload(
-        {"id": "req-cross-5", "method": "repo.outline", "params": {"path": r"src\mod.py"}}
-    )
+    outline_posix = call_tool(server, "req-cross-4", "repo.outline", {"path": "src/mod.py"})
+    outline_windows = call_tool(server, "req-cross-5", "repo.outline", {"path": r"src\mod.py"})
 
-    search_slash = server.handle_payload(
-        {
-            "id": "req-cross-6",
-            "method": "repo.search",
-            "params": {"query": "parse token", "mode": "bm25", "top_k": 10, "path_prefix": "src/"},
-        }
+    search_slash = call_tool(
+        server,
+        "req-cross-6",
+        "repo.search",
+        {"query": "parse token", "mode": "bm25", "top_k": 10, "path_prefix": "src/"},
     )
-    search_backslash = server.handle_payload(
-        {
-            "id": "req-cross-7",
-            "method": "repo.search",
-            "params": {
-                "query": "parse token",
-                "mode": "bm25",
-                "top_k": 10,
-                "path_prefix": r"src\\",
-            },
-        }
+    search_backslash = call_tool(
+        server,
+        "req-cross-7",
+        "repo.search",
+        {"query": "parse token", "mode": "bm25", "top_k": 10, "path_prefix": r"src\\"},
     )
 
-    assert open_posix["ok"] is True
-    assert open_windows["ok"] is True
-    assert open_posix["result"]["numbered_lines"] == open_windows["result"]["numbered_lines"]
+    assert not is_tool_error(open_posix)
+    assert not is_tool_error(open_windows)
+    assert (
+        extract_result(open_posix)["numbered_lines"]
+        == extract_result(open_windows)["numbered_lines"]
+    )
 
-    assert outline_posix["ok"] is True
-    assert outline_windows["ok"] is True
-    assert outline_posix["result"] == outline_windows["result"]
+    assert not is_tool_error(outline_posix)
+    assert not is_tool_error(outline_windows)
+    assert extract_result(outline_posix) == extract_result(outline_windows)
 
-    assert search_slash["ok"] is True
-    assert search_backslash["ok"] is True
-    assert search_slash["result"]["hits"] == search_backslash["result"]["hits"]
+    assert not is_tool_error(search_slash)
+    assert not is_tool_error(search_backslash)
+    assert extract_result(search_slash)["hits"] == extract_result(search_backslash)["hits"]

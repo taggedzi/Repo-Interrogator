@@ -180,37 +180,27 @@ def generate_server_stub() -> str:
 
         from __future__ import annotations
 
-        from dataclasses import dataclass
-
-
-        @dataclass(slots=True)
-        class Request:
-            request_id: str
-            method: str
-            params: dict[str, object]
+        import json
 
 
         class StdioServer:
             """Small deterministic shape compatible with workflow checks."""
 
-            def serve(self, line: str) -> str:
-                return self.handle_payload({"line": line})
+            def serve(self, line: str) -> str | None:
+                return self.handle_json_line(line)
 
-            def handle_json_line(self, payload: str) -> str:
-                request = self.parse_request(payload)
-                return self.handle_payload({"request": request})
+            def handle_json_line(self, raw: str) -> str | None:
+                try:
+                    payload = json.loads(raw)
+                except json.JSONDecodeError:
+                    error = {"code": -32700, "message": "Parse error"}
+                    return json.dumps({"jsonrpc": "2.0", "id": None, "error": error})
+                return self.handle_payload(payload)
 
-            def parse_request(self, payload: object) -> Request:
-                return Request(
-                    request_id="fixture",
-                    method="repo.status",
-                    params={"payload": payload},
-                )
-
-            def handle_payload(self, payload: object) -> str:
-                if isinstance(payload, dict):
-                    return f"ok:{sorted(payload.keys())}"
-                return "ok:payload"
+            def handle_payload(self, payload: object) -> str | None:
+                if not isinstance(payload, dict) or "id" not in payload:
+                    return None
+                return json.dumps({"jsonrpc": "2.0", "id": payload["id"], "result": {}})
         '''
         ).strip()
         + "\n"

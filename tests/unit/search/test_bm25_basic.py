@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.helpers import call_tool, extract_result
+
 from repo_mcp.server import create_server
 
 
@@ -16,20 +18,13 @@ def test_bm25_basic_returns_relevant_ranked_hits(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     server = create_server(repo_root=str(tmp_path))
-    refreshed = server.handle_payload(
-        {"id": "req-bm25-1", "method": "repo.refresh_index", "params": {}}
-    )
-    assert refreshed["ok"] is True
+    call_tool(server, "req-bm25-1", "repo.refresh_index", {})
 
-    response = server.handle_payload(
-        {
-            "id": "req-bm25-2",
-            "method": "repo.search",
-            "params": {"query": "alpha keyword", "mode": "bm25", "top_k": 2},
-        }
+    response = call_tool(
+        server, "req-bm25-2", "repo.search", {"query": "alpha keyword", "mode": "bm25", "top_k": 2}
     )
-    assert response["ok"] is True
-    hits = response["result"]["hits"]
+
+    hits = extract_result(response)["hits"]
     assert len(hits) == 2
     assert hits[0]["path"] == "src/alpha.py"
     assert hits[0]["score"] >= hits[1]["score"]

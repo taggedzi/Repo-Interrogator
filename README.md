@@ -51,16 +51,17 @@ The server uses STDIO. It waits for newline-delimited JSON requests and writes n
 4. Verify it responds:
 
 ```bash
-printf '%s\n' '{"id":"req-1","method":"repo.status","params":{}}' \
+printf '%s\n' \
+  '{"id":1,"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}' \
+  '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}' \
+  '{"id":2,"jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.status","arguments":{}}}' \
   | repo-mcp --repo-root /absolute/path/to/target/repo
 ```
 
-You should get a JSON envelope with keys like:
-- `request_id`
-- `ok`
-- `result`
-- `warnings`
-- `blocked`
+You should get two JSON-RPC 2.0 response lines (the notification produces no output):
+
+- Line 1: `initialize` result — `{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05",...}}`
+- Line 2: tool result — `{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"{\"index_status\":...}"}]}}`
 
 ## Developer Quick Start
 
@@ -134,6 +135,8 @@ python -m mypy src
 python -m pytest -q
 
 # quick server smoke
-printf '%s\n' '{"id":"req-docs-1","method":"repo.status","params":{}}' \
+printf '%s\n' \
+  '{"id":1,"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}' \
+  '{"id":2,"jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.status","arguments":{}}}' \
   | python -m repo_mcp.server --repo-root .
 ```

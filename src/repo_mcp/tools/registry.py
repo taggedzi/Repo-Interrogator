@@ -16,15 +16,32 @@ class ToolDispatchError(Exception):
     message: str
 
 
+@dataclass(slots=True, frozen=True)
+class ToolMetadata:
+    """MCP tool definition metadata: name, description, and JSON Schema."""
+
+    name: str
+    description: str
+    input_schema: dict[str, object]
+
+
 @dataclass(slots=True)
 class ToolRegistry:
     """In-memory tool registry preserving deterministic insertion order."""
 
     _handlers: dict[str, ToolHandler] = field(default_factory=dict)
+    _metadata: dict[str, ToolMetadata] = field(default_factory=dict)
 
-    def register(self, name: str, handler: ToolHandler) -> None:
-        """Register a named handler."""
+    def register(
+        self,
+        name: str,
+        handler: ToolHandler,
+        metadata: ToolMetadata | None = None,
+    ) -> None:
+        """Register a named handler with optional MCP metadata."""
         self._handlers[name] = handler
+        if metadata is not None:
+            self._metadata[name] = metadata
 
     def get(self, name: str) -> ToolHandler | None:
         """Return a handler by name."""
@@ -33,6 +50,21 @@ class ToolRegistry:
     def names(self) -> tuple[str, ...]:
         """Return registered tool names in deterministic order."""
         return tuple(self._handlers.keys())
+
+    def list_tools(self) -> list[dict[str, object]]:
+        """Return MCP tool definitions for all tools that have metadata registered."""
+        result: list[dict[str, object]] = []
+        for name in self._handlers:
+            meta = self._metadata.get(name)
+            if meta is not None:
+                result.append(
+                    {
+                        "description": meta.description,
+                        "inputSchema": meta.input_schema,
+                        "name": meta.name,
+                    }
+                )
+        return result
 
     def dispatch(self, name: str, arguments: dict[str, object]) -> dict[str, object]:
         """Dispatch to a registered tool by name."""

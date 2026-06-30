@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.helpers import call_tool, is_tool_error
+
 from repo_mcp.server import create_server
 
 
@@ -9,22 +11,23 @@ def test_bundle_exports_written_by_default(tmp_path: Path) -> None:
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "x.py").write_text("def x():\n    return 'x'\n", encoding="utf-8")
     server = create_server(repo_root=str(tmp_path))
-    server.handle_payload({"id": "req-exp-1", "method": "repo.refresh_index", "params": {}})
+    call_tool(server, "req-exp-1", "repo.refresh_index", {})
 
-    response = server.handle_payload(
+    response = call_tool(
+        server,
+        "req-exp-2",
+        "repo.build_context_bundle",
         {
-            "id": "req-exp-2",
-            "method": "repo.build_context_bundle",
-            "params": {
-                "prompt": "x return",
-                "budget": {"max_files": 1, "max_total_lines": 5},
-                "strategy": "hybrid",
-                "include_tests": True,
-            },
-        }
+            "prompt": "x return",
+            "budget": {"max_files": 1, "max_total_lines": 5},
+            "strategy": "hybrid",
+            "include_tests": True,
+        },
     )
-    assert response["ok"] is True
-    assert response["warnings"] == []
+
+    assert not is_tool_error(response)
+    content = response["result"]["content"]
+    assert len(content) == 1  # no warnings
     assert (tmp_path / ".repo_mcp" / "last_bundle.json").exists()
     assert (tmp_path / ".repo_mcp" / "last_bundle.md").exists()
 
@@ -37,20 +40,20 @@ def test_bundle_export_failure_returns_warning_but_success(tmp_path: Path) -> No
     (data_dir / "last_bundle.json").mkdir()
     (data_dir / "last_bundle.md").mkdir()
     server = create_server(repo_root=str(tmp_path))
-    response = server.handle_payload(
+    response = call_tool(
+        server,
+        "req-exp-3",
+        "repo.build_context_bundle",
         {
-            "id": "req-exp-3",
-            "method": "repo.build_context_bundle",
-            "params": {
-                "prompt": "x return",
-                "budget": {"max_files": 1, "max_total_lines": 5},
-                "strategy": "hybrid",
-                "include_tests": True,
-            },
-        }
+            "prompt": "x return",
+            "budget": {"max_files": 1, "max_total_lines": 5},
+            "strategy": "hybrid",
+            "include_tests": True,
+        },
     )
 
-    assert response["ok"] is True
-    assert response["blocked"] is False
-    assert len(response["warnings"]) >= 1
-    assert "last_bundle" in response["warnings"][0]
+    assert not is_tool_error(response)
+    content = response["result"]["content"]
+    assert len(content) >= 2  # result + at least one warning
+    warning_texts = [item["text"] for item in content[1:]]
+    assert any("last_bundle" in w for w in warning_texts)

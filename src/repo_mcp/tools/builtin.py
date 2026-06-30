@@ -18,7 +18,17 @@ from repo_mcp.security import (
     enforce_open_line_limits,
     resolve_repo_path,
 )
-from repo_mcp.tools.registry import ToolDispatchError, ToolHandler, ToolRegistry
+from repo_mcp.tools.registry import ToolDispatchError, ToolHandler, ToolMetadata, ToolRegistry
+from repo_mcp.tools.schemas import TOOL_SCHEMAS
+
+
+def _meta(name: str) -> ToolMetadata:
+    schema = TOOL_SCHEMAS[name]
+    return ToolMetadata(
+        name=name,
+        description=str(schema["description"]),
+        input_schema=dict(schema["inputSchema"]),  # type: ignore[call-overload]
+    )
 
 
 def register_builtin_tools(
@@ -39,18 +49,48 @@ def register_builtin_tools(
     registry.register(
         "repo.status",
         _status_handler(repo_root, limits, config, read_index_status),
+        _meta("repo.status"),
     )
-    registry.register("repo.list_files", _list_files_handler(list_files))
-    registry.register("repo.open_file", _open_file_handler(repo_root, limits))
-    registry.register("repo.outline", _outline_handler(outline_path))
-    registry.register("repo.search", _search_handler(limits, search_index))
+    registry.register(
+        "repo.list_files",
+        _list_files_handler(list_files),
+        _meta("repo.list_files"),
+    )
+    registry.register(
+        "repo.open_file",
+        _open_file_handler(repo_root, limits),
+        _meta("repo.open_file"),
+    )
+    registry.register(
+        "repo.outline",
+        _outline_handler(outline_path),
+        _meta("repo.outline"),
+    )
+    registry.register(
+        "repo.search",
+        _search_handler(limits, search_index),
+        _meta("repo.search"),
+    )
     registry.register(
         "repo.build_context_bundle",
         _build_context_bundle_handler(build_context_bundle),
+        _meta("repo.build_context_bundle"),
     )
-    registry.register("repo.references", _references_handler(limits, resolve_references))
-    registry.register("repo.refresh_index", _refresh_index_handler(refresh_index))
-    registry.register("repo.audit_log", _audit_log_handler(limits, read_audit_entries))
+    registry.register(
+        "repo.references",
+        _references_handler(limits, resolve_references),
+        _meta("repo.references"),
+    )
+    registry.register(
+        "repo.refresh_index",
+        _refresh_index_handler(refresh_index),
+        _meta("repo.refresh_index"),
+    )
+    registry.register(
+        "repo.audit_log",
+        _audit_log_handler(limits, read_audit_entries),
+        _meta("repo.audit_log"),
+    )
 
 
 def _status_handler(

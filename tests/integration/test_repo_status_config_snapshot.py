@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.helpers import call_tool, extract_result
+
 from repo_mcp.server import create_server
 
 
@@ -27,10 +29,8 @@ def test_repo_status_includes_effective_config_snapshot(tmp_path: Path) -> None:
     )
 
     server = create_server(repo_root=str(tmp_path))
-    response = server.handle_payload({"id": "req-status-1", "method": "repo.status", "params": {}})
+    result = extract_result(call_tool(server, "req-status-1", "repo.status", {}))
 
-    assert response["ok"] is True
-    result = response["result"]
     assert result["enabled_adapters"] == []
     assert result["limits_summary"] == {
         "max_file_bytes": 2048,

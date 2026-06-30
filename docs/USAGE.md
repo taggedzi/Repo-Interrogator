@@ -1,9 +1,9 @@
 # Usage
 
-This server uses MCP-style JSON messages over STDIO.
+This server implements MCP (Model Context Protocol) over JSON-RPC 2.0 via STDIO.
 
-- Input: one JSON object per line
-- Output: one JSON object per line
+- Input: one JSON-RPC 2.0 object per line (newline-delimited)
+- Output: one JSON-RPC 2.0 object per line (notifications receive no response)
 
 ## Start the Server
 
@@ -42,21 +42,21 @@ By default, index and cross-file references skip common non-project/cache/output
 This keeps retrieval focused on repository source/config content rather than language/tooling support artifacts.
 If your repository intentionally stores source-of-truth files in excluded paths, override with `index.exclude_globs` in `repo_mcp.toml`.
 
-## Request Shapes
+## Protocol: MCP over JSON-RPC 2.0
 
-The server accepts either of these request styles.
+All requests must use JSON-RPC 2.0 framing. The standard MCP lifecycle is:
 
-### Direct method style
+1. Send `initialize`
+2. Send `notifications/initialized` (no response)
+3. Send `tools/list` (optional — tool list is fixed)
+4. Send `tools/call` for each tool invocation
 
-```json
-{"id":"req-1","method":"repo.status","params":{}}
-```
-
-### MCP tools/call style
+### Request format
 
 ```json
 {
-  "id": "req-2",
+  "id": "req-1",
+  "jsonrpc": "2.0",
   "method": "tools/call",
   "params": {
     "name": "repo.search",
@@ -69,54 +69,27 @@ The server accepts either of these request styles.
 }
 ```
 
-## Response Envelope
+### Response format
 
-Success example:
-
-```json
-{
-  "request_id": "req-1",
-  "ok": true,
-  "result": {},
-  "warnings": [],
-  "blocked": false
-}
-```
-
-Blocked example:
+Tool call success — parse `content[0].text` to get the result payload:
 
 ```json
-{
-  "request_id": "req-3",
-  "ok": false,
-  "result": {
-    "reason": "Path traversal is blocked.",
-    "hint": "Remove '..' segments and use a repository-relative path."
-  },
-  "warnings": [],
-  "blocked": true,
-  "error": {
-    "code": "PATH_BLOCKED",
-    "message": "Path traversal is blocked."
-  }
-}
+{"jsonrpc":"2.0","id":"req-1","result":{"content":[{"type":"text","text":"{...}"}]}}
 ```
 
-Error example:
+Tool error (path blocked, invalid params, policy violation):
 
 ```json
-{
-  "request_id": "req-4",
-  "ok": false,
-  "result": {},
-  "warnings": [],
-  "blocked": false,
-  "error": {
-    "code": "INVALID_PARAMS",
-    "message": "repo.search query must be a non-empty string."
-  }
-}
+{"jsonrpc":"2.0","id":"req-1","result":{"content":[{"type":"text","text":"Path traversal is blocked."}],"isError":true}}
 ```
+
+Protocol-level error (unknown method, malformed JSON):
+
+```json
+{"jsonrpc":"2.0","id":"req-1","error":{"code":-32601,"message":"Method not found"}}
+```
+
+> **Note:** Throughout this document, "result fields" refer to fields in the JSON object parsed from `result.content[0].text`.
 
 ## Core Tools
 
@@ -126,7 +99,7 @@ Use this first. It shows index state, active limits, adapters, and effective con
 Request:
 
 ```json
-{"id":"req-s","method":"repo.status","params":{}}
+{"id":"req-s","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.status","arguments":{}}}
 ```
 
 Result fields include:
@@ -150,7 +123,7 @@ Params:
 Request:
 
 ```json
-{"id":"req-l","method":"repo.list_files","params":{"glob":"src/*.py","max_results":20}}
+{"id":"req-l","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.list_files","arguments":{"glob":"src/*.py","max_results":20}}}
 ```
 
 ## `repo.open_file`
@@ -164,7 +137,7 @@ Params:
 Request:
 
 ```json
-{"id":"req-o","method":"repo.open_file","params":{"path":"src/repo_mcp/server.py","start_line":1,"end_line":40}}
+{"id":"req-o","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.open_file","arguments":{"path":"src/repo_mcp/server.py","start_line":1,"end_line":40}}}
 ```
 
 Result fields:
@@ -181,7 +154,7 @@ Params:
 Request:
 
 ```json
-{"id":"req-out","method":"repo.outline","params":{"path":"src/repo_mcp/server.py"}}
+{"id":"req-out","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.outline","arguments":{"path":"src/repo_mcp/server.py"}}}
 ```
 
 Result fields:
@@ -212,13 +185,13 @@ Current language values:
 TypeScript example:
 
 ```json
-{"id":"req-out-ts","method":"repo.outline","params":{"path":"src/mod.ts"}}
+{"id":"req-out-ts","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.outline","arguments":{"path":"src/mod.ts"}}}
 ```
 
 C# example:
 
 ```json
-{"id":"req-out-cs","method":"repo.outline","params":{"path":"src/Program.cs"}}
+{"id":"req-out-cs","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.outline","arguments":{"path":"src/Program.cs"}}}
 ```
 
 Notes:
@@ -236,7 +209,7 @@ Params:
 Request:
 
 ```json
-{"id":"req-r","method":"repo.refresh_index","params":{"force":false}}
+{"id":"req-r","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.refresh_index","arguments":{"force":false}}}
 ```
 
 Result fields:
@@ -261,12 +234,16 @@ Request:
 ```json
 {
   "id": "req-search",
-  "method": "repo.search",
+  "jsonrpc": "2.0",
+  "method": "tools/call",
   "params": {
-    "query": "token parser",
-    "mode": "bm25",
-    "top_k": 5,
-    "file_glob": "src/*.py"
+    "name": "repo.search",
+    "arguments": {
+      "query": "token parser",
+      "mode": "bm25",
+      "top_k": 5,
+      "file_glob": "src/*.py"
+    }
   }
 }
 ```
@@ -292,10 +269,14 @@ Request:
 ```json
 {
   "id": "req-ref",
-  "method": "repo.references",
+  "jsonrpc": "2.0",
+  "method": "tools/call",
   "params": {
-    "symbol": "Service.run",
-    "top_k": 10
+    "name": "repo.references",
+    "arguments": {
+      "symbol": "Service.run",
+      "top_k": 10
+    }
   }
 }
 ```
@@ -334,12 +315,16 @@ Request:
 ```json
 {
   "id": "req-bundle",
-  "method": "repo.build_context_bundle",
+  "jsonrpc": "2.0",
+  "method": "tools/call",
   "params": {
-    "prompt": "trace token parser flow",
-    "budget": {"max_files": 4, "max_total_lines": 120},
-    "strategy": "hybrid",
-    "include_tests": false
+    "name": "repo.build_context_bundle",
+    "arguments": {
+      "prompt": "trace token parser flow",
+      "budget": {"max_files": 4, "max_total_lines": 120},
+      "strategy": "hybrid",
+      "include_tests": false
+    }
   }
 }
 ```
@@ -429,7 +414,7 @@ Params:
 Request:
 
 ```json
-{"id":"req-a","method":"repo.audit_log","params":{"limit":20}}
+{"id":"req-a","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.audit_log","arguments":{"limit":20}}}
 ```
 
 Event fields include:
@@ -446,39 +431,39 @@ Event fields include:
 1. Refresh index.
 
 ```json
-{"id":"w1","method":"repo.refresh_index","params":{"force":false}}
+{"id":"w1","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.refresh_index","arguments":{"force":false}}}
 ```
 
 2. Search for a symbol or term.
 
 ```json
-{"id":"w2","method":"repo.search","params":{"query":"build_context_bundle","mode":"bm25","top_k":5}}
+{"id":"w2","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.search","arguments":{"query":"build_context_bundle","mode":"bm25","top_k":5}}}
 ```
 
 3. Open the top hit range.
 
 ```json
-{"id":"w3","method":"repo.open_file","params":{"path":"src/repo_mcp/server.py","start_line":380,"end_line":470}}
+{"id":"w3","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.open_file","arguments":{"path":"src/repo_mcp/server.py","start_line":380,"end_line":470}}}
 ```
 
 4. Outline a key file.
 
 ```json
-{"id":"w4","method":"repo.outline","params":{"path":"src/repo_mcp/server.py"}}
+{"id":"w4","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.outline","arguments":{"path":"src/repo_mcp/server.py"}}}
 ```
 
 4a. (Optional v2.5) Resolve cross-file references for a symbol.
 
 ```json
-{"id":"w4-ref","method":"repo.references","params":{"symbol":"Service.run","top_k":10}}
+{"id":"w4-ref","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.references","arguments":{"symbol":"Service.run","top_k":10}}}
 ```
 
 Optional multilingual outline checks:
 
 ```json
-{"id":"w4a","method":"repo.outline","params":{"path":"src/mod.ts"}}
-{"id":"w4b","method":"repo.outline","params":{"path":"src/mod.go"}}
-{"id":"w4c","method":"repo.outline","params":{"path":"src/mod.rs"}}
+{"id":"w4a","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.outline","arguments":{"path":"src/mod.ts"}}}
+{"id":"w4b","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.outline","arguments":{"path":"src/mod.go"}}}
+{"id":"w4c","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.outline","arguments":{"path":"src/mod.rs"}}}
 ```
 
 5. Build a context bundle for your coding task.
@@ -486,12 +471,16 @@ Optional multilingual outline checks:
 ```json
 {
   "id": "w5",
-  "method": "repo.build_context_bundle",
+  "jsonrpc": "2.0",
+  "method": "tools/call",
   "params": {
-    "prompt": "explain server request handling and bundle flow",
-    "budget": {"max_files": 5, "max_total_lines": 150},
-    "strategy": "hybrid",
-    "include_tests": true
+    "name": "repo.build_context_bundle",
+    "arguments": {
+      "prompt": "explain server request handling and bundle flow",
+      "budget": {"max_files": 5, "max_total_lines": 150},
+      "strategy": "hybrid",
+      "include_tests": true
+    }
   }
 }
 ```
@@ -507,19 +496,19 @@ Goal: isolate likely faulty implementation and collect compact cited context.
 1. Refresh index:
 
 ```json
-{"id":"bug-1","method":"repo.refresh_index","params":{"force":false}}
+{"id":"bug-1","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.refresh_index","arguments":{"force":false}}}
 ```
 
 2. Search symptom/function terms:
 
 ```json
-{"id":"bug-2","method":"repo.search","params":{"query":"Service.run timeout parse error","mode":"bm25","top_k":8}}
+{"id":"bug-2","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.search","arguments":{"query":"Service.run timeout parse error","mode":"bm25","top_k":8}}}
 ```
 
 3. Open top hit line range:
 
 ```json
-{"id":"bug-3","method":"repo.open_file","params":{"path":"src/service.py","start_line":1,"end_line":120}}
+{"id":"bug-3","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.open_file","arguments":{"path":"src/service.py","start_line":1,"end_line":120}}}
 ```
 
 4. Build focused bundle:
@@ -527,12 +516,16 @@ Goal: isolate likely faulty implementation and collect compact cited context.
 ```json
 {
   "id": "bug-4",
-  "method": "repo.build_context_bundle",
+  "jsonrpc": "2.0",
+  "method": "tools/call",
   "params": {
-    "prompt": "find likely bug in Service.run and nearby call flow",
-    "budget": {"max_files": 3, "max_total_lines": 120},
-    "strategy": "hybrid",
-    "include_tests": false
+    "name": "repo.build_context_bundle",
+    "arguments": {
+      "prompt": "find likely bug in Service.run and nearby call flow",
+      "budget": {"max_files": 3, "max_total_lines": 120},
+      "strategy": "hybrid",
+      "include_tests": false
+    }
   }
 }
 ```
@@ -549,19 +542,19 @@ Goal: estimate affected files before changing a symbol/API.
 1. Confirm declaration boundaries:
 
 ```json
-{"id":"ref-1","method":"repo.outline","params":{"path":"src/service.py"}}
+{"id":"ref-1","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.outline","arguments":{"path":"src/service.py"}}}
 ```
 
 2. Resolve cross-file usages for target symbol:
 
 ```json
-{"id":"ref-2","method":"repo.references","params":{"symbol":"Service.run","top_k":50}}
+{"id":"ref-2","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.references","arguments":{"symbol":"Service.run","top_k":50}}}
 ```
 
 3. (Optional) Scope to one file when reviewing local impact:
 
 ```json
-{"id":"ref-3","method":"repo.references","params":{"symbol":"Service.run","path":"src/handlers.py","top_k":50}}
+{"id":"ref-3","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.references","arguments":{"symbol":"Service.run","path":"src/handlers.py","top_k":50}}}
 ```
 
 Check:
@@ -577,13 +570,13 @@ Goal: trace request path across entrypoint, orchestrator, and service layers.
 1. Locate likely entrypoints:
 
 ```json
-{"id":"flow-1","method":"repo.search","params":{"query":"handle_request route controller service", "mode":"bm25","top_k":10}}
+{"id":"flow-1","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.search","arguments":{"query":"handle_request route controller service","mode":"bm25","top_k":10}}}
 ```
 
 2. Follow symbol usages:
 
 ```json
-{"id":"flow-2","method":"repo.references","params":{"symbol":"handle_request","top_k":50}}
+{"id":"flow-2","jsonrpc":"2.0","method":"tools/call","params":{"name":"repo.references","arguments":{"symbol":"handle_request","top_k":50}}}
 ```
 
 3. Build trace bundle for explanation/citations:
@@ -591,12 +584,16 @@ Goal: trace request path across entrypoint, orchestrator, and service layers.
 ```json
 {
   "id": "flow-3",
-  "method": "repo.build_context_bundle",
+  "jsonrpc": "2.0",
+  "method": "tools/call",
   "params": {
-    "prompt": "trace request flow from API entrypoint through handlers into service calls",
-    "budget": {"max_files": 5, "max_total_lines": 180},
-    "strategy": "hybrid",
-    "include_tests": false
+    "name": "repo.build_context_bundle",
+    "arguments": {
+      "prompt": "trace request flow from API entrypoint through handlers into service calls",
+      "budget": {"max_files": 5, "max_total_lines": 180},
+      "strategy": "hybrid",
+      "include_tests": false
+    }
   }
 }
 ```

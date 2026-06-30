@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.helpers import call_tool, extract_result, is_tool_error
+
 from repo_mcp.config import CliOverrides
 from repo_mcp.server import create_server
 
@@ -28,27 +30,23 @@ def test_effective_policy_limits_and_denylist_behavior(tmp_path: Path) -> None:
         cli_overrides=CliOverrides(max_search_hits=4),
     )
 
-    status = server.handle_payload({"id": "req-pol-1", "method": "repo.status", "params": {}})
-    assert status["ok"] is True
-    assert status["result"]["limits_summary"]["max_search_hits"] == 4
+    status = call_tool(server, "req-pol-1", "repo.status", {})
+    assert not is_tool_error(status)
+    assert extract_result(status)["limits_summary"]["max_search_hits"] == 4
 
-    blocked = server.handle_payload(
-        {
-            "id": "req-pol-2",
-            "method": "repo.open_file",
-            "params": {"path": ".env", "start_line": 1, "end_line": 1},
-        }
+    blocked = call_tool(
+        server,
+        "req-pol-2",
+        "repo.open_file",
+        {"path": ".env", "start_line": 1, "end_line": 1},
     )
-    assert blocked["blocked"] is True
-    assert blocked["error"]["code"] == "PATH_BLOCKED"
+    assert is_tool_error(blocked)
 
-    server.handle_payload({"id": "req-pol-3", "method": "repo.refresh_index", "params": {}})
-    search_blocked = server.handle_payload(
-        {
-            "id": "req-pol-4",
-            "method": "repo.search",
-            "params": {"query": "keyword", "mode": "bm25", "top_k": 10},
-        }
+    call_tool(server, "req-pol-3", "repo.refresh_index", {})
+    search_blocked = call_tool(
+        server,
+        "req-pol-4",
+        "repo.search",
+        {"query": "keyword", "mode": "bm25", "top_k": 10},
     )
-    assert search_blocked["blocked"] is True
-    assert search_blocked["error"]["code"] == "PATH_BLOCKED"
+    assert is_tool_error(search_blocked)

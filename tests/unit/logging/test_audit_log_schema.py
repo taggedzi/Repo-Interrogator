@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from tests.helpers import call_tool
+
 from repo_mcp.server import create_server
 
 
 def test_audit_log_writes_jsonl_schema(tmp_path: Path) -> None:
     server = create_server(repo_root=str(tmp_path))
-    server.handle_payload({"id": "req-100", "method": "repo.status", "params": {}})
+    call_tool(server, "req-100", "repo.status", {})
 
     audit_path = tmp_path / ".repo_mcp" / "audit.jsonl"
     assert audit_path.exists()

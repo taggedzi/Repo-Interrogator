@@ -24,87 +24,92 @@ def test_stdio_workflow_e2e(tmp_path: Path) -> None:
 
     proc = _start_server(repo_root=tmp_path)
     try:
-        status = _call_tool(proc, "req-e2e-1", "repo.status", {})
-        assert status["ok"] is True
-        assert status["result"]["index_status"] == "not_indexed"
+        # MCP handshake
+        init_resp = _send(
+            proc,
+            {
+                "id": 0,
+                "jsonrpc": "2.0",
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "e2e", "version": "0"},
+                },
+            },
+        )
+        assert init_resp["result"]["protocolVersion"] == "2024-11-05"
+        _send_notification(
+            proc, {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
+        )
 
-        refreshed = _call_tool(proc, "req-e2e-2", "repo.refresh_index", {"force": False})
-        assert refreshed["ok"] is True
-        assert refreshed["result"]["added"] == 2
+        status = _extract(_call_tool(proc, "req-e2e-1", "repo.status", {}))
+        assert status["index_status"] == "not_indexed"
 
-        listed = _call_tool(proc, "req-e2e-3", "repo.list_files", {"max_results": 10})
-        assert listed["ok"] is True
-        assert [entry["path"] for entry in listed["result"]["files"]] == [
+        refreshed = _extract(_call_tool(proc, "req-e2e-2", "repo.refresh_index", {"force": False}))
+        assert refreshed["added"] == 2
+
+        listed = _extract(_call_tool(proc, "req-e2e-3", "repo.list_files", {"max_results": 10}))
+        assert [entry["path"] for entry in listed["files"]] == [
             "docs/guide.md",
             "src/app.py",
         ]
 
-        opened = _call_tool(
-            proc,
-            "req-e2e-4",
-            "repo.open_file",
-            {"path": "src/app.py", "start_line": 1, "end_line": 3},
+        opened = _extract(
+            _call_tool(
+                proc,
+                "req-e2e-4",
+                "repo.open_file",
+                {"path": "src/app.py", "start_line": 1, "end_line": 3},
+            )
         )
-        assert opened["ok"] is True
-        assert opened["result"]["path"] == "src/app.py"
-        assert len(opened["result"]["numbered_lines"]) == 3
+        assert opened["path"] == "src/app.py"
+        assert len(opened["numbered_lines"]) == 3
 
-        search_first = _call_tool(
-            proc,
-            "req-e2e-5",
-            "repo.search",
-            {"query": "token parser", "mode": "bm25", "top_k": 5},
+        search_first = _extract(
+            _call_tool(
+                proc,
+                "req-e2e-5",
+                "repo.search",
+                {"query": "token parser", "mode": "bm25", "top_k": 5},
+            )
         )
-        search_second = _call_tool(
-            proc,
-            "req-e2e-6",
-            "repo.search",
-            {"query": "token parser", "mode": "bm25", "top_k": 5},
+        search_second = _extract(
+            _call_tool(
+                proc,
+                "req-e2e-6",
+                "repo.search",
+                {"query": "token parser", "mode": "bm25", "top_k": 5},
+            )
         )
-        assert search_first["ok"] is True
-        assert search_second["ok"] is True
-        assert search_first["result"]["hits"] == search_second["result"]["hits"]
+        assert search_first["hits"] == search_second["hits"]
 
-        outlined = _call_tool(proc, "req-e2e-7", "repo.outline", {"path": "src/app.py"})
-        assert outlined["ok"] is True
-        assert outlined["result"]["language"] == "python"
-        assert [s["name"] for s in outlined["result"]["symbols"]] == [
-            "App",
-            "App.run",
-            "parse_token",
-        ]
+        outlined = _extract(_call_tool(proc, "req-e2e-7", "repo.outline", {"path": "src/app.py"}))
+        assert outlined["language"] == "python"
+        assert [s["name"] for s in outlined["symbols"]] == ["App", "App.run", "parse_token"]
 
-        references = _call_tool(
-            proc,
-            "req-e2e-8",
-            "repo.references",
-            {"symbol": "App.run", "top_k": 5},
+        references = _extract(
+            _call_tool(proc, "req-e2e-8", "repo.references", {"symbol": "App.run", "top_k": 5})
         )
-        assert references["ok"] is True
-        assert set(references["result"].keys()) == {
-            "symbol",
-            "references",
-            "truncated",
-            "total_candidates",
-        }
+        assert set(references.keys()) == {"symbol", "references", "truncated", "total_candidates"}
 
-        bundled = _call_tool(
-            proc,
-            "req-e2e-9",
-            "repo.build_context_bundle",
-            {
-                "prompt": "token parser",
-                "budget": {"max_files": 2, "max_total_lines": 20},
-                "strategy": "hybrid",
-                "include_tests": True,
-            },
+        bundled = _extract(
+            _call_tool(
+                proc,
+                "req-e2e-9",
+                "repo.build_context_bundle",
+                {
+                    "prompt": "token parser",
+                    "budget": {"max_files": 2, "max_total_lines": 20},
+                    "strategy": "hybrid",
+                    "include_tests": True,
+                },
+            )
         )
-        assert bundled["ok"] is True
-        assert bundled["result"]["totals"]["selected_files"] >= 1
+        assert bundled["totals"]["selected_files"] >= 1
 
-        audit = _call_tool(proc, "req-e2e-10", "repo.audit_log", {"limit": 20})
-        assert audit["ok"] is True
-        tools = [entry["tool"] for entry in audit["result"]["entries"]]
+        audit = _extract(_call_tool(proc, "req-e2e-10", "repo.audit_log", {"limit": 20}))
+        tools = [entry["tool"] for entry in audit["entries"]]
         assert "repo.build_context_bundle" in tools
         assert "repo.references" in tools
         assert "repo.search" in tools
@@ -137,24 +142,50 @@ def _start_server(repo_root: Path) -> subprocess.Popen[str]:
     )
 
 
-def _call_tool(
-    proc: subprocess.Popen[str],
-    request_id: str,
-    method: str,
-    params: dict[str, object],
-) -> dict[str, Any]:
+def _send(proc: subprocess.Popen[str], payload: dict[str, Any]) -> dict[str, Any]:
+    """Send a JSON-RPC 2.0 request and read the response."""
     assert proc.stdin is not None
     assert proc.stdout is not None
-    payload = {"id": request_id, "method": method, "params": params}
     proc.stdin.write(json.dumps(payload) + "\n")
     proc.stdin.flush()
     line = proc.stdout.readline()
     if not line:
-        stderr_output = ""
-        if proc.stderr is not None:
-            stderr_output = proc.stderr.read()
+        stderr_output = proc.stderr.read() if proc.stderr else ""
         raise RuntimeError(f"Server produced no response. stderr={stderr_output}")
     return json.loads(line)
+
+
+def _send_notification(proc: subprocess.Popen[str], payload: dict[str, Any]) -> None:
+    """Send a notification (no response expected)."""
+    assert proc.stdin is not None
+    proc.stdin.write(json.dumps(payload) + "\n")
+    proc.stdin.flush()
+
+
+def _call_tool(
+    proc: subprocess.Popen[str],
+    request_id: str,
+    tool_name: str,
+    arguments: dict[str, object],
+) -> dict[str, Any]:
+    """Send a tools/call request and return the full JSON-RPC 2.0 response."""
+    return _send(
+        proc,
+        {
+            "id": request_id,
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "params": {"name": tool_name, "arguments": arguments},
+        },
+    )
+
+
+def _extract(response: dict[str, Any]) -> dict[str, Any]:
+    """Extract the tool result dict from a successful tools/call response."""
+    assert "error" not in response, f"JSON-RPC error: {response}"
+    result = response["result"]
+    assert not result.get("isError"), f"Tool error: {result['content'][0]['text']}"
+    return json.loads(result["content"][0]["text"])
 
 
 def _stop_server(proc: subprocess.Popen[str]) -> None:

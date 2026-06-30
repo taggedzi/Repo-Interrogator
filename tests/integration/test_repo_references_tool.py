@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.helpers import call_tool, extract_result
+
 from repo_mcp.server import create_server
 
 
@@ -25,34 +27,22 @@ def test_repo_references_tool_returns_deterministic_structured_payload(tmp_path:
     )
     server = create_server(repo_root=str(tmp_path))
 
-    first = server.handle_payload(
-        {
-            "id": "req-ref-1",
-            "method": "repo.references",
-            "params": {"symbol": "Service.run", "top_k": 10},
-        }
+    first = extract_result(
+        call_tool(server, "req-ref-1", "repo.references", {"symbol": "Service.run", "top_k": 10})
     )
-    second = server.handle_payload(
-        {
-            "id": "req-ref-2",
-            "method": "repo.references",
-            "params": {"symbol": "Service.run", "top_k": 10},
-        }
+    second = extract_result(
+        call_tool(server, "req-ref-2", "repo.references", {"symbol": "Service.run", "top_k": 10})
     )
 
-    assert first["ok"] is True
-    assert second["ok"] is True
-    assert first["result"] == second["result"]
+    assert first == second
+    assert set(first.keys()) == {"symbol", "references", "truncated", "total_candidates"}
+    assert first["symbol"] == "Service.run"
+    assert isinstance(first["references"], list)
+    assert first["total_candidates"] == len(first["references"])
+    assert first["truncated"] is False
 
-    result = first["result"]
-    assert set(result.keys()) == {"symbol", "references", "truncated", "total_candidates"}
-    assert result["symbol"] == "Service.run"
-    assert isinstance(result["references"], list)
-    assert result["total_candidates"] == len(result["references"])
-    assert result["truncated"] is False
-
-    if result["references"]:
-        first_ref = result["references"][0]
+    if first["references"]:
+        first_ref = first["references"][0]
         assert set(first_ref.keys()) == {
             "symbol",
             "path",
@@ -76,29 +66,25 @@ def test_repo_references_tool_path_scope_and_truncation(tmp_path: Path) -> None:
     )
     server = create_server(repo_root=str(tmp_path))
 
-    scoped = server.handle_payload(
-        {
-            "id": "req-ref-scope-1",
-            "method": "repo.references",
-            "params": {"symbol": "Service.run", "path": "src/a.ts", "top_k": 10},
-        }
+    scoped = extract_result(
+        call_tool(
+            server,
+            "req-ref-scope-1",
+            "repo.references",
+            {"symbol": "Service.run", "path": "src/a.ts", "top_k": 10},
+        )
     )
-    assert scoped["ok"] is True
-    scoped_refs = scoped["result"]["references"]
-    assert scoped_refs
-    assert {item["path"] for item in scoped_refs} == {"src/a.ts"}
+    assert scoped["references"]
+    assert {item["path"] for item in scoped["references"]} == {"src/a.ts"}
 
-    truncated = server.handle_payload(
-        {
-            "id": "req-ref-scope-2",
-            "method": "repo.references",
-            "params": {"symbol": "Service.run", "top_k": 1},
-        }
+    truncated = extract_result(
+        call_tool(
+            server, "req-ref-scope-2", "repo.references", {"symbol": "Service.run", "top_k": 1}
+        )
     )
-    assert truncated["ok"] is True
-    assert truncated["result"]["truncated"] is True
-    assert truncated["result"]["total_candidates"] >= 2
-    assert len(truncated["result"]["references"]) == 1
+    assert truncated["truncated"] is True
+    assert truncated["total_candidates"] >= 2
+    assert len(truncated["references"]) == 1
 
 
 def test_repo_references_skips_excluded_dirs_and_non_indexed_extensions(tmp_path: Path) -> None:
@@ -118,14 +104,9 @@ def test_repo_references_skips_excluded_dirs_and_non_indexed_extensions(tmp_path
     )
     server = create_server(repo_root=str(tmp_path))
 
-    response = server.handle_payload(
-        {
-            "id": "req-ref-filter-1",
-            "method": "repo.references",
-            "params": {"symbol": "Api.run", "top_k": 50},
-        }
+    result = extract_result(
+        call_tool(server, "req-ref-filter-1", "repo.references", {"symbol": "Api.run", "top_k": 50})
     )
 
-    assert response["ok"] is True
-    paths = [item["path"] for item in response["result"]["references"]]
+    paths = [item["path"] for item in result["references"]]
     assert all(path == "src/api.ts" for path in paths)
