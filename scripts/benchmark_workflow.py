@@ -193,7 +193,8 @@ def generate_server_stub() -> str:
                 try:
                     payload = json.loads(raw)
                 except json.JSONDecodeError:
-                    return json.dumps({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}})
+                    error = {"code": -32700, "message": "Parse error"}
+                    return json.dumps({"jsonrpc": "2.0", "id": None, "error": error})
                 return self.handle_payload(payload)
 
             def handle_payload(self, payload: object) -> str | None:
