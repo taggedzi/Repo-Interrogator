@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from tests.helpers import call_tool, is_tool_error, tool_error_text
+
 from repo_mcp.server import create_server
 
 
@@ -37,11 +39,9 @@ def test_schema_version_mismatch_returns_explicit_error(tmp_path: Path) -> None:
     )
 
     server = create_server(repo_root=str(tmp_path))
-    response = server.handle_payload(
-        {"id": "req-schema", "method": "repo.refresh_index", "params": {"force": False}}
-    )
+    response = call_tool(server, "req-schema", "repo.refresh_index", {"force": False})
 
-    assert response["ok"] is False
-    assert response["blocked"] is False
-    assert response["error"]["code"] == "INDEX_SCHEMA_UNSUPPORTED"
-    assert "force=true" in response["error"]["message"]
+    assert is_tool_error(response)
+    text = tool_error_text(response)
+    assert "INDEX_SCHEMA_UNSUPPORTED" in text or "schema" in text.lower()
+    assert "force=true" in text

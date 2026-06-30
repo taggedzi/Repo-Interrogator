@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from tests.helpers import call_tool, extract_result
+
 from repo_mcp.server import create_server
 
 
@@ -26,14 +28,12 @@ def test_force_refresh_rebuilds_when_schema_mismatched(tmp_path: Path) -> None:
     )
 
     server = create_server(repo_root=str(tmp_path))
-    response = server.handle_payload(
-        {"id": "req-force", "method": "repo.refresh_index", "params": {"force": True}}
-    )
+    response = call_tool(server, "req-force", "repo.refresh_index", {"force": True})
 
-    assert response["ok"] is True
-    assert response["result"]["added"] == 1
-    assert response["result"]["updated"] == 0
-    assert response["result"]["removed"] == 0
+    result = extract_result(response)
+    assert result["added"] == 1
+    assert result["updated"] == 0
+    assert result["removed"] == 0
 
     manifest = json.loads((index_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["schema_version"] == 1
