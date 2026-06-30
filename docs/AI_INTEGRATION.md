@@ -1,298 +1,142 @@
 # AI Integration (MCP over STDIO)
 
-This guide explains how to connect AI tooling to Repo Interrogator.
+This guide explains how to connect standard MCP clients to Repo Interrogator.
 
-## MCP in Plain Language
+## Protocol
 
-MCP is a way for an AI client to call local tools.
-
-In this project, the MCP server runs as a local process. The AI client sends JSON requests to stdin and reads JSON responses from stdout.
-
-## What "STDIO transport" means
-
-- The AI client starts `repo-mcp` as a subprocess.
-- The client writes one JSON object per line to stdin.
-- The server writes one JSON object per line to stdout.
-- There is no HTTP server, port, or remote service.
+Repo Interrogator implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io) over STDIO using JSON-RPC 2.0. Standard MCP clients (Claude Desktop, Claude Code, Cursor, and others) connect out of the box without any custom configuration.
 
 ## Launch Command
-
-Use one of these:
 
 ```bash
 repo-mcp --repo-root /absolute/path/to/target/repo
 ```
 
-or
+Or via module form:
 
 ```bash
 python -m repo_mcp.server --repo-root /absolute/path/to/target/repo
 ```
 
 Optional flags:
-- `--data-dir`
-- `--max-file-bytes`
-- `--max-open-lines`
-- `--max-total-bytes-per-response`
-- `--max-search-hits`
-- `--max-references`
-- `--python-adapter-enabled true|false`
+- `--data-dir` — where to store index, audit log, and bundle artifacts
+- `--max-file-bytes` — cap on single file read size
+- `--max-open-lines` — cap on lines read per `repo.open_file` call
+- `--max-total-bytes-per-response` — cap on total response size
+- `--max-search-hits` — cap on `top_k` for search and audit log
+- `--max-references` — cap on `top_k` for references
+- `--python-adapter-enabled true|false` — enable/disable AST-based Python analysis
 
-Default discovery excludes common non-source/cache/output directories (for example `.git`, `.github`, `.repo_mcp`, `__pycache__`, `.venv`, `.mypy_cache`, `.pytest_cache`, `.ruff_cache`, `node_modules`, `dist`, `build`, `target`).
-This reduces noise and improves retrieval latency for index/search/references.
-If your repo stores important content in excluded paths, adjust `index.exclude_globs` in `repo_mcp.toml`.
+## MCP Handshake
 
-Environment variables:
-- none required by this server
+Standard clients handle this automatically. The sequence is:
 
-## Important Compatibility Note
+1. Client → `initialize` — negotiates protocol version and capabilities
+2. Server → returns `protocolVersion: "2024-11-05"`, `capabilities: {tools: {}}`, `serverInfo`
+3. Client → `notifications/initialized` — server silently acknowledges
+4. Client → `tools/list` — server returns all 9 tool definitions with JSON Schema
+5. Client → `tools/call` — invoke a tool; result is a text content block containing JSON
 
-Current implementation supports:
-- direct method calls (for example `{"method":"repo.status"...}`)
-- `tools/call` requests (`params.name` + `params.arguments`)
+## Client Setup
 
-Current implementation does not expose a dedicated tools discovery endpoint.
+### Claude Desktop
 
-So, tool names and argument shapes should be preconfigured in the client using this fixed tool set:
-- `repo.status`
-- `repo.list_files`
-- `repo.open_file`
-- `repo.outline`
-- `repo.search`
-- `repo.references`
-- `repo.build_context_bundle`
-- `repo.refresh_index`
-- `repo.audit_log`
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
-## Client Setup Examples
+```json
+{
+  "mcpServers": {
+    "my-project": {
+      "command": "repo-mcp",
+      "args": ["--repo-root", "/absolute/path/to/your/project"]
+    }
+  }
+}
+```
 
-These are practical templates. Client-specific field names may vary.
+If `repo-mcp` is not on PATH, use the full path to the executable or replace `command` with `python` and `args` with `["-m", "repo_mcp.server", "--repo-root", "..."]`.
 
-## A) Claude Desktop style config (template)
+### Claude Code (claude.ai/code)
 
-Use this as a starting point only, then adjust to your client's exact schema.
+Add to `.claude/settings.json` in your project:
 
 ```json
 {
   "mcpServers": {
     "repo-interrogator": {
       "command": "repo-mcp",
-      "args": [
-        "--repo-root",
-        "/absolute/path/to/target/repo"
-      ]
+      "args": ["--repo-root", "."]
     }
   }
 }
 ```
 
-If `repo-mcp` is not on PATH, use:
-- full executable path, or
-- `python` + `-m repo_mcp.server` in command/args form.
+### Cursor
 
-## B) Cursor or Windsurf external tool style (generic)
+Open Cursor settings → MCP → Add server:
+- Command: `repo-mcp`
+- Args: `["--repo-root", "/absolute/path/to/your/project"]`
+- Transport: `stdio`
 
-Use a local command tool entry that launches:
+### Any MCP Client (generic)
 
-```bash
-repo-mcp --repo-root /absolute/path/to/target/repo
-```
+Configure a subprocess MCP server with:
+- Command: `repo-mcp`
+- Args: `["--repo-root", "/absolute/path/to/your/project"]`
+- Transport: `stdio`
 
-Set transport to STDIO if your client asks.
+The client will discover tools automatically via `tools/list`.
 
-Because exact config keys vary by version, map these concepts:
-- executable command
-- argument array
-- working directory (optional)
-- stdio transport mode
+## Available Tools
 
-## C) Any MCP client (generic checklist)
+All 9 tools are discovered automatically by the client. Descriptions and JSON Schema are served via `tools/list`.
 
-1. Configure subprocess command and args.
-2. Point `--repo-root` at one target repository.
-3. Send newline-delimited JSON requests.
-4. Parse response envelope fields:
-   - `ok`
-   - `blocked`
-   - `result`
-   - `warnings`
-   - `error` (if present)
+| Tool | Purpose |
+|------|---------|
+| `repo.status` | Check index state, limits, and config — call this first |
+| `repo.refresh_index` | Build or refresh the BM25 search index |
+| `repo.search` | BM25 full-text search over indexed files |
+| `repo.open_file` | Read a line range from a file |
+| `repo.outline` | Get class/function/symbol structure of a file |
+| `repo.references` | Find cross-file usages of a named symbol |
+| `repo.build_context_bundle` | Compact, ranked, cited excerpt set for a coding task |
+| `repo.list_files` | List files under the repository root |
+| `repo.audit_log` | Read sanitized log of all tool calls in this session |
 
-## How AI should choose tools
+## Recommended Workflow for AI Clients
 
-A practical order:
-
-1. `repo.status` to check limits/index state.
-2. `repo.refresh_index` if index is stale or not built.
-3. `repo.search` to locate relevant files/ranges.
-4. `repo.open_file` for exact lines.
-5. `repo.outline` for declaration structure (Python AST + lexical adapters).
-6. `repo.references` for cross-file usage links (`symbol` + optional `path` scope).
-7. `repo.build_context_bundle` when you need compact cited context.
-8. `repo.audit_log` for diagnostics and verification.
-
-When using `repo.outline`, each symbol includes:
-- `kind`, `name`, `signature`, `start_line`, `end_line`, `doc`
-- optional v2 metadata: `parent_symbol`, `scope_kind`, `is_conditional`, `decl_context`
-
-Interpretation notes:
-- Outline output is declaration-based and deterministic.
-- Python includes nested and conditional declarations as syntactic facts.
-- Runtime branch truth is not evaluated.
-
-`repo.references` notes:
-- Returns deterministic declaration-linked references with `strategy` + `confidence`.
-- Python uses `ast`; non-Python uses lexical fallback in v2.5.
-- Use `top_k` to bound payload size and `path` to scope to one file.
-- When `path` is omitted, candidate files are selected using the same discovery filters as indexing (`include_extensions` + `exclude_globs` + binary exclusion).
-
-`repo.build_context_bundle` v2.5 explainability notes:
-- Each selection includes `why_selected` with signal and score component details.
-- `audit.ranking_debug` includes bounded ranking candidate diagnostics.
-
-## LLM Workflow Recipes (v2.6)
-
-Use these as deterministic client playbooks.
-
-### Recipe A: Bug Investigation
-
-When a bug report names behavior but not exact file:
-
-1. `repo.refresh_index`
-2. `repo.search` with symptom + likely symbol terms
-3. `repo.open_file` on top hit ranges
-4. `repo.build_context_bundle` with strict budget
-
-Expected evidence fields:
-- bundle `selections[*].why_selected`
-- bundle `citations[*]`
-- bundle `audit.selection_debug.why_not_selected_summary`
-
-### Recipe B: Refactor Impact Analysis
-
-Before renaming/changing a symbol contract:
-
-1. `repo.outline` for declaration boundaries
-2. `repo.references` for cross-file usage (`symbol`, optional `path`)
-3. `repo.build_context_bundle` for a compact change-impact packet
-
-Expected evidence fields:
-- references `references[*].path`
-- references `references[*].line`
-- references `references[*].strategy`
-- references `references[*].confidence`
-
-### Recipe C: API/Data-Flow Tracing
-
-For "how does request X propagate?" prompts:
-
-1. `repo.search` for entrypoint/handler/router terms
-2. `repo.references` for key handoff symbols
-3. `repo.open_file` on edge transitions
-4. `repo.build_context_bundle` for final cited trace context
-
-Expected evidence fields:
-- bundle `audit.ranking_debug.top_candidates`
-- bundle `audit.selection_debug.why_not_selected_summary.top_skipped`
-- bundle `totals` and `citations`
-
-## LLM Performance Checklist
-
-Use this checklist to keep retrieval fast and predictable in AI client workflows:
-
-- Scope references when possible: prefer `repo.references` with `path` for file-focused analysis.
-- Keep index excludes tuned: ensure `index.exclude_globs` removes cache/build/tooling directories.
-- Keep index includes focused: include only language extensions needed for your repository tasks.
-- Bound response sizes: use `top_k` for search/references and strict budgets for bundles.
-- Avoid unbounded broad scans in loops: cache/reuse results client-side when issuing repeated prompts.
-- Verify active config first: call `repo.status` and inspect `effective_config.index` + `limits_summary`.
-
-## How to interpret and use results safely
-
-- Treat `blocked: true` as final for that request. Do not guess hidden content.
-- Use citations from bundle output and search ranges.
-- Quote file references as `path:start_line-end_line`.
-- Keep excerpts small and tied to exact ranges.
-
-Example citation style:
-- `src/repo_mcp/server.py:120-168`
-- `src/repo_mcp/tools/builtin.py:140-190`
-
-## Prompt snippet for AI clients
-
-Paste this into your AI tool's system or task prompt:
+Add this to your system prompt or project instructions:
 
 ```text
-Use Repo Interrogator tools before making assumptions.
-Start with repo.status.
-If needed, run repo.refresh_index.
-Use repo.search to find relevant code, then repo.open_file and repo.outline for exact evidence.
-For larger tasks, call repo.build_context_bundle with a strict budget and cite file paths with line ranges.
-If a tool response is blocked, do not infer blocked content.
+Use Repo Interrogator tools before making assumptions about the codebase.
+1. Call repo.status to confirm the server is connected.
+2. Call repo.refresh_index if the index is not yet built.
+3. Use repo.search to locate relevant files, then repo.open_file for exact lines.
+4. Use repo.outline for class/function structure and repo.references for cross-file usage.
+5. For larger tasks, call repo.build_context_bundle with a prompt and budget — it returns compact cited context with why_selected explanations.
+If a tool response contains isError: true, report the error text to the user rather than guessing.
 ```
 
-## Minimal request example
+## Default Discovery Filters
 
-```json
-{"id":"ai-1","method":"repo.status","params":{}}
-```
+The index and reference finder skip common noise directories automatically:
 
-Example `tools/call` request:
+- `.git`, `.github`, `.repo_mcp`
+- `__pycache__`, `.venv`, `.mypy_cache`, `.pytest_cache`, `.ruff_cache`, `.tox`, `.nox`
+- `node_modules`, `.next`, `.nuxt`, `dist`, `build`, `target`, `bin`, `obj`, `out`, `coverage`, `tmp`
 
-```json
-{
-  "id": "ai-2",
-  "method": "tools/call",
-  "params": {
-    "name": "repo.search",
-    "arguments": {
-      "query": "build_context_bundle",
-      "mode": "bm25",
-      "top_k": 5
-    }
-  }
-}
-```
+If your project stores source files in an excluded path, override with `index.exclude_globs` in `repo_mcp.toml`.
 
-Reference lookup example:
+## Error Handling
 
-```json
-{
-  "id": "ai-3",
-  "method": "tools/call",
-  "params": {
-    "name": "repo.references",
-    "arguments": {
-      "symbol": "Service.run",
-      "top_k": 10
-    }
-  }
-}
-```
+- Tool errors (blocked paths, invalid params, index not built) are returned as `isError: true` content blocks — the AI client sees a human-readable message.
+- Protocol errors (unknown methods, parse errors) are returned as JSON-RPC error objects.
+- `blocked: true` on a path means access was denied by the security policy — do not attempt to infer the blocked content.
 
-Bundle explainability example (result snippet):
+## Performance Checklist
 
-```json
-{
-  "selections": [
-    {
-      "path": "src/service.py",
-      "why_selected": {
-        "matched_signals": ["search_score", "matched_terms", "definition_match", "aligned_symbol"],
-        "score_components": {
-          "search_score": 2.5,
-          "definition_match": true,
-          "reference_count_in_range": 0
-        }
-      }
-    }
-  ],
-  "audit": {
-    "ranking_debug": {
-      "candidate_count": 3,
-      "definition_match_count": 1,
-      "reference_proximity_count": 0
-    }
-  }
-}
-```
+- Call `repo.status` first and check `index_status` — if not `ready`, run `repo.refresh_index`.
+- Use `top_k` to bound search and reference result sizes.
+- Use `repo.references` with `path` to scope to a single file when possible.
+- Use strict `budget` values in `repo.build_context_bundle` to avoid oversized responses.
+- Keep `index.exclude_globs` tuned to exclude build/cache/tooling directories.
