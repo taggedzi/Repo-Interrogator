@@ -348,17 +348,31 @@ Error handling:
 
 ## 11. MCP tools (v1)
 
-### Common response envelope
+### Wire protocol (JSON-RPC 2.0)
+
+All messages use JSON-RPC 2.0 framing over STDIO (newline-delimited).
+
+Tool call success — result payload is JSON-encoded in `content[0].text`:
 
 ```json
-{
-  "request_id": "uuid",
-  "ok": true,
-  "result": {},
-  "warnings": [],
-  "blocked": false
-}
+{"jsonrpc":"2.0","id":"req-1","result":{"content":[{"type":"text","text":"{...}"}]}}
 ```
+
+Tool error (path blocked, invalid params, policy violation) — `isError: true` so the client receives a human-readable message:
+
+```json
+{"jsonrpc":"2.0","id":"req-1","result":{"content":[{"type":"text","text":"Path traversal is blocked."}],"isError":true}}
+```
+
+Protocol-level error (unknown method, malformed JSON):
+
+```json
+{"jsonrpc":"2.0","id":"req-1","error":{"code":-32601,"message":"Method not found"}}
+```
+
+Standard JSON-RPC 2.0 error codes: `-32700` parse error, `-32600` invalid request, `-32601` method not found, `-32603` internal error.
+
+All tool invocations must use `tools/call`. Direct method routing (e.g. `{"method":"repo.status"}`) is not supported and returns `-32601`.
 
 ---
 
@@ -637,7 +651,7 @@ Notes:
 ## 12. Observability
 
 * Structured JSONL audit log
-* Each request has a stable `request_id`
+* Each audit log entry records a stable `request_id` (derived from the JSON-RPC request `id`)
 * Optionally write:
 
   * `last_bundle.json`
