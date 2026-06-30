@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+from repo_mcp.server import create_server
 from repo_mcp.tools.schemas import TOOL_SCHEMAS
 
 EXPECTED_TOOLS = [
@@ -39,3 +42,13 @@ def test_required_params_are_correct() -> None:
         "prompt",
         "budget",
     ]
+
+
+def test_builtin_tools_all_have_metadata_registered(tmp_path: Path) -> None:
+    server = create_server(repo_root=str(tmp_path))
+    tools = server._registry.list_tools()
+    names = {t["name"] for t in tools}
+    assert names == set(EXPECTED_TOOLS)
+    for tool in tools:
+        assert tool["description"]
+        assert tool["inputSchema"]
