@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.helpers import call_tool, extract_result, is_tool_error
+
 from repo_mcp.security import SecurityLimits
 from repo_mcp.server import create_server
-
-from tests.helpers import call_tool, extract_result, is_tool_error
 
 
 def test_search_file_glob_and_path_prefix_filters(tmp_path: Path) -> None:

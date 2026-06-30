@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from repo_mcp.server import create_server
 from tests.helpers import call_tool
+
+from repo_mcp.server import create_server
 
 
 def test_audit_log_writes_jsonl_schema(tmp_path: Path) -> None:

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.helpers import call_tool, extract_result
+
 from repo_mcp.config import CliOverrides
 from repo_mcp.server import create_server
-from tests.helpers import call_tool, extract_result
 
 
 def test_merge_order_defaults_then_repo_then_cli(tmp_path: Path) -> None:

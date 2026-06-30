@@ -3,8 +3,9 @@ from __future__ import annotations
 import socket
 from pathlib import Path
 
-from repo_mcp.server import create_server
 from tests.helpers import call_tool, is_tool_error
+
+from repo_mcp.server import create_server
 
 
 def test_no_network_calls_during_tool_workflow(tmp_path: Path, monkeypatch) -> None:

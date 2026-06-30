@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from repo_mcp.server import create_server
 from tests.helpers import call_tool, extract_result, is_tool_error
+
+from repo_mcp.server import create_server
 
 
 def test_open_file_path_normalization_windows_and_posix_inputs(tmp_path: Path) -> None:

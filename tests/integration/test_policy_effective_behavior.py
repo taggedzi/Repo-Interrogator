@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.helpers import call_tool, extract_result, is_tool_error
+
 from repo_mcp.config import CliOverrides
 from repo_mcp.server import create_server
-from tests.helpers import call_tool, extract_result, is_tool_error
 
 
 def test_effective_policy_limits_and_denylist_behavior(tmp_path: Path) -> None:

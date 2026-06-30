@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from repo_mcp.server import create_server
 from tests.helpers import call_tool, extract_result, is_tool_error
+
+from repo_mcp.server import create_server
 
 
 def _load_fixture(path: str) -> str:
