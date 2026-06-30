@@ -469,7 +469,6 @@ class WorkflowValidator:
         if isinstance(symbols, list):
             preferred_symbols = (
                 "StdioServer.handle_payload",
-                "StdioServer.parse_request",
                 "StdioServer.handle_json_line",
                 "StdioServer.serve",
             )
