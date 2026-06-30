@@ -10,7 +10,9 @@ import os
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import TextIO, TypedDict, cast
 
@@ -37,15 +39,6 @@ from repo_mcp.security import (
 )
 from repo_mcp.tools.builtin import register_builtin_tools
 from repo_mcp.tools.registry import ToolDispatchError, ToolRegistry
-
-
-@dataclass(slots=True, frozen=True)
-class Request:
-    """Normalized incoming request."""
-
-    request_id: str
-    method: str
-    params: dict[str, object]
 
 
 class _AdapterProfileBucket(TypedDict):
@@ -107,7 +100,6 @@ class StdioServer:
             resolve_references=self._resolve_references,
             config=self._config,
         )
-        self._fallback_request_counter = 0
         self._reference_profile_enabled = os.getenv(
             "REPO_MCP_PROFILE_REFERENCES", ""
         ).strip().lower() in {"1", "true", "yes"}
@@ -128,272 +120,215 @@ class StdioServer:
             if not line:
                 continue
             response = self.handle_json_line(line)
+            if response is None:
+                continue
             out_stream.write(f"{json.dumps(response, sort_keys=True)}\n")
             out_stream.flush()
 
-    def handle_json_line(self, raw_line: str) -> dict[str, object]:
-        """Handle a single JSON-line request."""
+    def handle_json_line(self, raw_line: str) -> dict[str, object] | None:
+        """Handle a single JSON-line request. Returns None for notifications."""
         try:
             payload = json.loads(raw_line)
         except json.JSONDecodeError:
-            request_id = self.next_request_id()
-            response = self.error_response(
-                request_id=request_id,
-                code="INVALID_JSON",
-                message="Request must be valid JSON.",
-            )
-            self.log_request(
-                request_id=request_id,
-                tool_name="invalid_json",
-                arguments={"raw_line_length": len(raw_line)},
-                response=response,
-            )
-            return response
+            return self.jsonrpc_error(None, -32700, "Parse error: request must be valid JSON.")
         return self.handle_payload(payload)
 
-    def handle_payload(self, payload: object) -> dict[str, object]:
-        """Validate and dispatch a parsed payload."""
-        parsed = self.parse_request(payload)
-        if isinstance(parsed, dict):
-            request_id_value = parsed.get("request_id")
-            request_id = (
-                request_id_value if isinstance(request_id_value, str) else self.next_request_id()
-            )
-            self.log_request(
-                request_id=request_id,
-                tool_name="invalid_request",
-                arguments={},
-                response=parsed,
-            )
-            return parsed
-
-        request = parsed
-        tool_name: str
-        arguments: dict[str, object]
-        if request.method == "tools/call":
-            tool_name_value = request.params.get("name")
-            arguments_value = request.params.get("arguments", {})
-            if not isinstance(tool_name_value, str) or not tool_name_value:
-                return self.error_response(
-                    request_id=request.request_id,
-                    code="INVALID_PARAMS",
-                    message="tools/call params.name must be a non-empty string.",
-                )
-            if not isinstance(arguments_value, dict):
-                return self.error_response(
-                    request_id=request.request_id,
-                    code="INVALID_PARAMS",
-                    message="tools/call params.arguments must be an object.",
-                )
-            tool_name = tool_name_value
-            arguments = arguments_value
-        else:
-            tool_name = request.method
-            arguments = request.params
-
-        try:
-            result = self._registry.dispatch(name=tool_name, arguments=arguments)
-        except PathBlockedError as error:
-            response = self.blocked_response(
-                request_id=request.request_id,
-                reason=error.reason,
-                hint=error.hint,
-            )
-            self.log_request(
-                request_id=request.request_id,
-                tool_name=tool_name,
-                arguments=arguments,
-                response=response,
-            )
-            return response
-        except PolicyBlockedError as error:
-            response = self.blocked_response(
-                request_id=request.request_id,
-                reason=error.reason,
-                hint=error.hint,
-            )
-            self.log_request(
-                request_id=request.request_id,
-                tool_name=tool_name,
-                arguments=arguments,
-                response=response,
-            )
-            return response
-        except ToolDispatchError as error:
-            response = self.error_response(
-                request_id=request.request_id,
-                code=error.code,
-                message=error.message,
-            )
-            self.log_request(
-                request_id=request.request_id,
-                tool_name=tool_name,
-                arguments=arguments,
-                response=response,
-            )
-            return response
-        except IndexSchemaUnsupportedError as error:
-            response = self.error_response(
-                request_id=request.request_id,
-                code="INDEX_SCHEMA_UNSUPPORTED",
-                message=(
-                    f"Stored index schema {error.found} is unsupported; expected "
-                    f"{error.expected}. Run repo.refresh_index with force=true."
-                ),
-            )
-            self.log_request(
-                request_id=request.request_id,
-                tool_name=tool_name,
-                arguments=arguments,
-                response=response,
-            )
-            return response
-        except Exception:
-            response = self.error_response(
-                request_id=request.request_id,
-                code="INTERNAL_ERROR",
-                message="Unhandled server error while executing tool.",
-            )
-            self.log_request(
-                request_id=request.request_id,
-                tool_name=tool_name,
-                arguments=arguments,
-                response=response,
-            )
-            return response
-
-        warnings = _extract_result_warnings(result)
-        response = self.success_response(
-            request_id=request.request_id,
-            result=result,
-            warnings=warnings,
-        )
-        enforced = self.enforce_response_size_limit(
-            request_id=request.request_id, response=response
-        )
-        self.log_request(
-            request_id=request.request_id,
-            tool_name=tool_name,
-            arguments=arguments,
-            response=enforced,
-        )
-        return enforced
-
-    def parse_request(self, payload: object) -> Request | dict[str, object]:
-        """Validate request payload and return normalized Request."""
+    def handle_payload(self, payload: object) -> dict[str, object] | None:
+        """Validate and dispatch a JSON-RPC 2.0 payload. Returns None for notifications."""
         if not isinstance(payload, dict):
-            return self.error_response(
-                request_id=self.next_request_id(),
-                code="INVALID_REQUEST",
-                message="Request must be an object.",
-            )
+            return self.jsonrpc_error(None, -32600, "Invalid Request: must be an object.")
 
-        request_id = self.extract_request_id(payload.get("id"))
+        has_id = "id" in payload
+        raw_id = payload.get("id")
+        id_: str | int | None
+        if isinstance(raw_id, str):
+            id_ = raw_id
+        elif isinstance(raw_id, int):
+            id_ = raw_id
+        else:
+            id_ = None
+
         method = payload.get("method")
         params = payload.get("params", {})
 
         if not isinstance(method, str) or not method:
-            return self.error_response(
-                request_id=request_id,
-                code="INVALID_REQUEST",
-                message="Request method must be a non-empty string.",
+            if not has_id:
+                return None
+            return self.jsonrpc_error(
+                id_, -32600, "Invalid Request: method must be a non-empty string."
             )
+
         if not isinstance(params, dict):
-            return self.error_response(
-                request_id=request_id,
-                code="INVALID_PARAMS",
-                message="Request params must be an object.",
-            )
+            if not has_id:
+                return None
+            return self.jsonrpc_error(id_, -32600, "Invalid Request: params must be an object.")
 
-        return Request(request_id=request_id, method=method, params=params)
+        if not has_id:
+            return None
 
-    def extract_request_id(self, request_id: object) -> str:
-        """Extract request ID from payload or synthesize deterministic fallback."""
-        if isinstance(request_id, str) and request_id:
-            return request_id
-        if isinstance(request_id, int):
-            return str(request_id)
-        return self.next_request_id()
+        if method == "initialize":
+            return self._handle_initialize(id_)
 
-    def next_request_id(self) -> str:
-        """Generate deterministic fallback request IDs for invalid/missing IDs."""
-        self._fallback_request_counter += 1
-        return f"req-{self._fallback_request_counter:06d}"
+        if method == "tools/list":
+            return self.jsonrpc_result(id_, {"tools": self._registry.list_tools()})
+
+        if method == "tools/call":
+            return self._handle_tools_call(id_, params)
+
+        return self.jsonrpc_error(id_, -32601, f"Method not found: {method}")
 
     @staticmethod
-    def success_response(
-        request_id: str,
-        result: dict[str, object],
-        warnings: list[str] | None = None,
-    ) -> dict[str, object]:
-        """Build success envelope."""
-        return {
-            "request_id": request_id,
-            "ok": True,
-            "result": result,
-            "warnings": warnings or [],
-            "blocked": False,
-        }
+    def jsonrpc_result(id_: str | int | None, result: dict[str, object]) -> dict[str, object]:
+        """Build a JSON-RPC 2.0 success response."""
+        return {"id": id_, "jsonrpc": "2.0", "result": result}
 
     @staticmethod
-    def error_response(request_id: str, code: str, message: str) -> dict[str, object]:
-        """Build explicit error envelope."""
-        return {
-            "request_id": request_id,
-            "ok": False,
-            "result": {},
-            "warnings": [],
-            "blocked": False,
-            "error": {"code": code, "message": message},
-        }
+    def jsonrpc_error(id_: str | int | None, code: int, message: str) -> dict[str, object]:
+        """Build a JSON-RPC 2.0 error response."""
+        return {"error": {"code": code, "message": message}, "id": id_, "jsonrpc": "2.0"}
 
     @staticmethod
-    def blocked_response(request_id: str, reason: str, hint: str) -> dict[str, object]:
-        """Build explicit blocked response envelope."""
-        return {
-            "request_id": request_id,
-            "ok": False,
-            "result": {"reason": reason, "hint": hint},
-            "warnings": [],
-            "blocked": True,
-            "error": {"code": "PATH_BLOCKED", "message": reason},
-        }
+    def tool_content(text: str) -> dict[str, object]:
+        """Build a successful MCP tool result with one text content block."""
+        return {"content": [{"text": text, "type": "text"}]}
 
-    def enforce_response_size_limit(
-        self,
-        request_id: str,
-        response: dict[str, object],
-    ) -> dict[str, object]:
-        """Block responses that exceed max_total_bytes_per_response."""
-        response_bytes = len(json.dumps(response, sort_keys=True).encode("utf-8"))
-        if response_bytes <= self._limits.max_total_bytes_per_response:
-            return response
-        return self.blocked_response(
-            request_id=request_id,
-            reason="Response exceeds max_total_bytes_per_response limit.",
-            hint="Request fewer lines or lower result volume.",
+    @staticmethod
+    def tool_error_content(text: str) -> dict[str, object]:
+        """Build an isError MCP tool result with one text content block."""
+        return {"content": [{"text": text, "type": "text"}], "isError": True}
+
+    def _handle_initialize(self, id_: str | int | None) -> dict[str, object]:
+        """Respond to the MCP initialize handshake."""
+        try:
+            ver: str = _pkg_version("repo-interrogator")
+        except PackageNotFoundError:
+            ver = "0.0.0"
+        return self.jsonrpc_result(
+            id_,
+            {
+                "capabilities": {"tools": {}},
+                "protocolVersion": "2024-11-05",
+                "serverInfo": {"name": "repo-interrogator", "version": ver},
+            },
         )
 
-    def log_request(
+    def _handle_tools_call(
+        self, id_: str | int | None, params: dict[str, object]
+    ) -> dict[str, object]:
+        """Dispatch a tools/call request and wrap the result in MCP content blocks."""
+        tool_name_value = params.get("name")
+        arguments_value = params.get("arguments", {})
+
+        if not isinstance(tool_name_value, str) or not tool_name_value:
+            return self.jsonrpc_error(
+                id_,
+                -32602,
+                "Invalid params: tools/call name must be a non-empty string.",
+            )
+        if not isinstance(arguments_value, dict):
+            return self.jsonrpc_error(
+                id_,
+                -32602,
+                "Invalid params: tools/call arguments must be an object.",
+            )
+
+        tool_name = tool_name_value
+        arguments = cast(dict[str, object], arguments_value)
+
+        try:
+            result = self._registry.dispatch(name=tool_name, arguments=arguments)
+        except PathBlockedError as error:
+            self._log_request(
+                str(id_), tool_name, arguments, ok=False, blocked=True, error_code="PATH_BLOCKED"
+            )
+            return self.jsonrpc_result(
+                id_, self.tool_error_content(f"Blocked: {error.reason} {error.hint}")
+            )
+        except PolicyBlockedError as error:
+            self._log_request(
+                str(id_), tool_name, arguments, ok=False, blocked=True, error_code="POLICY_BLOCKED"
+            )
+            return self.jsonrpc_result(
+                id_, self.tool_error_content(f"Blocked: {error.reason} {error.hint}")
+            )
+        except ToolDispatchError as error:
+            self._log_request(
+                str(id_),
+                tool_name,
+                arguments,
+                ok=False,
+                blocked=False,
+                error_code=error.code,
+            )
+            return self.jsonrpc_result(
+                id_, self.tool_error_content(f"Error ({error.code}): {error.message}")
+            )
+        except IndexSchemaUnsupportedError as error:
+            msg = (
+                f"Index schema error: stored schema {error.found!r} is unsupported "
+                f"(expected {error.expected!r}). Run repo.refresh_index with force=true."
+            )
+            self._log_request(
+                str(id_),
+                tool_name,
+                arguments,
+                ok=False,
+                blocked=False,
+                error_code="INDEX_SCHEMA_UNSUPPORTED",
+            )
+            return self.jsonrpc_result(id_, self.tool_error_content(msg))
+        except Exception:
+            self._log_request(
+                str(id_), tool_name, arguments, ok=False, blocked=False, error_code="INTERNAL_ERROR"
+            )
+            return self.jsonrpc_error(id_, -32603, "Internal server error.")
+
+        warnings = _extract_result_warnings(result)
+        text = json.dumps(result, sort_keys=True)
+        content: list[dict[str, object]] = [{"text": text, "type": "text"}]
+        for w in warnings:
+            content.append({"text": f"Warning: {w}", "type": "text"})
+
+        tool_result: dict[str, object] = {"content": content}
+        response = self.jsonrpc_result(id_, tool_result)
+
+        response_bytes = len(json.dumps(response, sort_keys=True).encode("utf-8"))
+        if response_bytes > self._limits.max_total_bytes_per_response:
+            self._log_request(
+                str(id_),
+                tool_name,
+                arguments,
+                ok=False,
+                blocked=True,
+                error_code="RESPONSE_TOO_LARGE",
+            )
+            return self.jsonrpc_result(
+                id_,
+                self.tool_error_content(
+                    "Response exceeds max_total_bytes_per_response limit. "
+                    "Request fewer lines or lower result volume."
+                ),
+            )
+
+        self._log_request(str(id_), tool_name, arguments, ok=True, blocked=False, error_code=None)
+        return response
+
+    def _log_request(
         self,
         request_id: str,
         tool_name: str,
         arguments: dict[str, object],
-        response: dict[str, object],
+        ok: bool,
+        blocked: bool,
+        error_code: str | None,
     ) -> None:
-        """Log one sanitized request event."""
-        error_payload = response.get("error")
-        error_code: str | None = None
-        if isinstance(error_payload, dict):
-            code_value = error_payload.get("code")
-            if isinstance(code_value, str):
-                error_code = code_value
+        """Append one sanitized audit event."""
         event = AuditEvent(
             timestamp=utc_timestamp(),
             request_id=request_id,
             tool=tool_name,
-            ok=bool(response.get("ok", False)),
-            blocked=bool(response.get("blocked", False)),
+            ok=ok,
+            blocked=blocked,
             error_code=error_code,
             metadata=sanitize_arguments(arguments),
         )
