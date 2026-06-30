@@ -18,7 +18,7 @@ For historical detail, see:
 
 ## Current Focus
 
-- Server now speaks MCP-compliant JSON-RPC 2.0 (`ADR-0017`); `feat/mcp-jsonrpc2-compliance` is ready to merge/PR.
+- Server now speaks MCP-compliant JSON-RPC 2.0 (`ADR-0017`); `feat/mcp-jsonrpc2-compliance` merged via PR #1.
 - Preserve current reliability/determinism while improving usefulness for LLM repository interrogation.
 - Avoid changes that materially increase fragility or hidden complexity.
 
@@ -40,9 +40,7 @@ _None open._
 
 ## Icebox
 
-- [ ] `ENH-TS-001` Optional enhanced parsing path for TS/JS (only with explicit dependency and ADR approval).
-- [ ] `ENH-JAVA-001` Optional enhanced parsing path for Java (same gating).
-- [ ] `ENH-OTHERS-001` Optional enhanced parsing path for Go/Rust/C++/C# (same gating).
+_None open. Enhanced (parser-backed) outline paths for TS/JS, Java, Go/Rust/C++/C# were considered and dropped (2026-06-30): no demonstrated need beyond the lexical adapters, and ADR-0009's revisit triggers aren't met. See `ADR-0009` if this resurfaces._
 
 ## Notes
 
