@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.helpers import call_tool, extract_result
+
 from repo_mcp.server import create_server
 
 
@@ -46,15 +48,9 @@ def test_repo_outline_selects_expected_adapter_by_extension(tmp_path: Path) -> N
     }
 
     for index, (path, language) in enumerate(expected.items(), start=1):
-        response = server.handle_payload(
-            {
-                "id": f"req-outline-multi-{index}",
-                "method": "repo.outline",
-                "params": {"path": path},
-            }
+        result = extract_result(
+            call_tool(server, f"req-outline-multi-{index}", "repo.outline", {"path": path})
         )
-        assert response["ok"] is True
-        result = response["result"]
         assert result["path"] == path
         assert result["language"] == language
 

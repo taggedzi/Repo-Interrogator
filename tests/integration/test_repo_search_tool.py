@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.helpers import call_tool, extract_result
+
 from repo_mcp.server import create_server
 
 
@@ -16,20 +18,18 @@ def test_repo_search_tool_returns_structured_hits(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     server = create_server(repo_root=str(tmp_path))
-    refreshed = server.handle_payload(
-        {"id": "req-s-1", "method": "repo.refresh_index", "params": {}}
-    )
-    assert refreshed["ok"] is True
+    call_tool(server, "req-s-1", "repo.refresh_index", {})
 
-    response = server.handle_payload(
-        {
-            "id": "req-s-2",
-            "method": "repo.search",
-            "params": {"query": "parser", "mode": "bm25", "top_k": 5, "file_glob": "pkg/*.py"},
-        }
+    result = extract_result(
+        call_tool(
+            server,
+            "req-s-2",
+            "repo.search",
+            {"query": "parser", "mode": "bm25", "top_k": 5, "file_glob": "pkg/*.py"},
+        )
     )
-    assert response["ok"] is True
-    hits = response["result"]["hits"]
+
+    hits = result["hits"]
     assert len(hits) == 2
     for hit in hits:
         assert set(hit.keys()) == {
