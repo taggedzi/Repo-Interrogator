@@ -19,6 +19,8 @@ For historical detail, see:
 ## Current Focus
 
 - Server now speaks MCP-compliant JSON-RPC 2.0 (`ADR-0017`); `feat/mcp-jsonrpc2-compliance` merged via PR #1.
+- `repo.find_definition` and Python `read`/`write` reference kinds landed (2026-07-01).
+- Optional semantic/hybrid search landed (2026-07-01, `ADR-0018`): `repo.search` `mode`, `repo.build_context_bundle` `retrieval_mode`, `repo.status` `semantic_*` fields. Core package stays zero-dependency; feature is inert without the `[semantic]` extra. **Not yet functional end-to-end** — `DEFAULT_MODEL_SPEC` in `src/repo_mcp/semantic/model_cache.py` ships as an unpinned placeholder; `mode="semantic"`/`"hybrid"` fails closed with an explicit error until a maintainer manually resolves and checksums a real model (see `ADR-0018`'s Known Limitation note).
 - Preserve current reliability/determinism while improving usefulness for LLM repository interrogation.
 - Avoid changes that materially increase fragility or hidden complexity.
 
@@ -32,11 +34,11 @@ _None open._
 
 ## Next
 
-_None open._
+- Pin a real embedding model for `DEFAULT_MODEL_SPEC` (resolve commit SHA, download, compute SHA256, replace placeholder values — steps documented in `src/repo_mcp/semantic/model_cache.py`) so semantic/hybrid search actually works.
 
 ## Later
 
-_None open._
+- Semantic search fast-follows (all deferred as Minor by final review, non-blocking): drop vestigial `Embedder._max_tokens`; assert `vectors.jsonl` on-disk sort order in `test_vector_store.py`; skip `VectorStore.refresh`'s disk rewrite when nothing changed; align `manager.py`'s unreachable bare `ValueError` (unsupported search mode) to the `SemanticNotAvailableError`/`ToolDispatchError` pattern.
 
 ## Icebox
 

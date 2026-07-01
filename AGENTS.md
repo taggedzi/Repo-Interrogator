@@ -9,6 +9,45 @@ If anything in this file conflicts with `SPEC.md`, **`SPEC.md` is the source of 
 
 ---
 
+# Agent Instructions
+
+Use `codebase-memory-mcp` as the first tool for understanding this repository.
+
+Before doing broad file reads, grep searches, or architecture exploration:
+- Query codebase-memory-mcp for relevant files, symbols, callers, callees, dependencies, and entry points.
+- Use graph results to narrow the search area.
+- Only read full files after identifying likely relevant targets.
+
+Prefer codebase-memory-mcp for:
+- finding where a function/class/module is defined
+- finding callers and callees
+- tracing execution paths
+- identifying entry points
+- understanding project structure
+- impact analysis before edits
+- detecting dead or disconnected code
+- summarizing architecture
+
+Use direct file reads for:
+- editing code
+- checking exact implementation details
+- reviewing tests
+- inspecting config files
+- verifying behavior before making changes
+
+When starting work in this repo:
+1. Check whether the project is indexed.
+2. Index or refresh the index if needed.
+3. Use graph queries before broad text searches.
+4. Keep context small by reading only the files needed for the current task.
+
+When making changes:
+- Use codebase-memory-mcp to find affected callers/tests.
+- Read the exact files before editing.
+- Run the smallest relevant tests first.
+
+---
+
 ## Python environment
 
 This project uses a Python virtual environment located at `.venv/`.
