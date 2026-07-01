@@ -29,6 +29,10 @@ release = [
   "build>=1.2.2",
   "twine>=5.1",
 ]
+semantic = [
+  "onnxruntime>=1.18",
+  "tokenizers>=0.19",
+]
 
 [project.scripts]
 repo-mcp = "repo_mcp.server:main"

@@ -40,7 +40,9 @@ The server does **not** write code, apply patches, or run tests. It provides the
 * No Git operations
 * No multi-repo management
 * No HTTP/SSE transport in v1
-* No LLM calls in v1
+* No LLM calls in v1 (generative or agentic). Local, deterministic-per-machine
+  sentence-embedding inference for retrieval ranking is a distinct, narrowly
+  scoped, opt-in capability — see §11.5 and §11.7 and `ADR-0018`.
 
 ---
 
