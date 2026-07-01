@@ -268,8 +268,11 @@ download (triggered automatically on first `semantic`/`hybrid` call).
   client can check before attempting semantic mode.
 - `"hybrid"` uses Reciprocal Rank Fusion over BM25 and semantic rank
   positions — see `SPEC.md` §11.5 for the exact formula.
-- Requesting `semantic`/`hybrid` without the extra installed, or before the
-  model has finished its first download, returns an explicit tool error.
+- Requesting `semantic`/`hybrid` without the extra installed returns an
+  explicit tool error. If the extra is installed but the model hasn't been
+  downloaded yet, the first call automatically triggers a one-time download
+  rather than erroring; only a missing extra or a download-checksum failure
+  returns an error.
 
 ## `repo.references` (v2.5)
 Return deterministic cross-file references for one symbol.

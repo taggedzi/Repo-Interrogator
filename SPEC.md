@@ -479,9 +479,13 @@ Returns:
 Mode notes:
 
 * `"bm25"` is always available and is the default.
-* `"semantic"` and `"hybrid"` require the optional `semantic` install extra
-  and a cached local embedding model; requesting them without both returns
-  an explicit error, never a silent fallback to `"bm25"`.
+* `"semantic"` and `"hybrid"` require the optional `semantic` install extra.
+  Requesting either without the extra installed returns an explicit error,
+  never a silent fallback to `"bm25"`. If the extra is installed but the
+  local embedding model hasn't been downloaded yet, the first
+  `"semantic"`/`"hybrid"` call automatically triggers a one-time download
+  (which may add latency but does not error) — only a missing extra or a
+  failed download-checksum verification returns an error.
 * `"hybrid"` fuses BM25 and semantic rankings via Reciprocal Rank Fusion
   (RRF): `score = sum(1 / (60 + rank))` over each ranked list a candidate
   appears in (1-based rank, candidates absent from a list contribute 0 for
