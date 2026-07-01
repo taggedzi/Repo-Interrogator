@@ -87,6 +87,34 @@ def reference_sort_key(reference: SymbolReference) -> tuple[str, int, str, str]:
     return (reference.path, reference.line, reference.symbol, reference.kind)
 
 
+def outline_symbol_matches(candidate_name: str, requested_symbol: str) -> bool:
+    """Return True when an outline symbol's qualified name matches a requested symbol.
+
+    Mirrors the matching semantics used for cross-file reference lookups: an
+    exact match, a bare short-name match, or a qualified-suffix match (e.g.
+    requesting "run" matches "Service.run", and requesting "Service.run"
+    matches a bare "run" declaration).
+    """
+    if candidate_name == requested_symbol:
+        return True
+    short_requested = requested_symbol.rsplit(".", 1)[-1]
+    short_candidate = candidate_name.rsplit(".", 1)[-1]
+    if candidate_name == short_requested:
+        return True
+    if requested_symbol == short_candidate:
+        return True
+    # Only apply qualified-suffix matching if at least one side is just the short name
+    if short_candidate == short_requested:
+        is_candidate_qualified = "." in candidate_name
+        is_requested_qualified = "." in requested_symbol
+        # Match if short names match and at least one is unqualified
+        if not (is_candidate_qualified and is_requested_qualified):
+            return candidate_name.endswith(f".{short_requested}") or requested_symbol.endswith(
+                f".{short_candidate}"
+            )
+    return False
+
+
 def validate_symbol_references(references: list[SymbolReference]) -> None:
     """Validate references against required invariant fields."""
     allowed_confidence = {"high", "medium", "low"}
