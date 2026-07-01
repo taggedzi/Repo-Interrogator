@@ -91,9 +91,11 @@ def outline_symbol_matches(candidate_name: str, requested_symbol: str) -> bool:
     """Return True when an outline symbol's qualified name matches a requested symbol.
 
     Mirrors the matching semantics used for cross-file reference lookups: an
-    exact match, a bare short-name match, or a qualified-suffix match (e.g.
-    requesting "run" matches "Service.run", and requesting "Service.run"
-    matches a bare "run" declaration).
+    exact match, or one side being the bare short (last-segment) form of the
+    other (e.g. requesting "run" matches "Service.run", and requesting
+    "Service.run" matches a bare "run" declaration). Two differently-qualified
+    names that merely share the same short name (e.g. "Service.run" vs.
+    "OtherService.run") do not match.
     """
     if candidate_name == requested_symbol:
         return True
@@ -103,15 +105,6 @@ def outline_symbol_matches(candidate_name: str, requested_symbol: str) -> bool:
         return True
     if requested_symbol == short_candidate:
         return True
-    # Only apply qualified-suffix matching if at least one side is just the short name
-    if short_candidate == short_requested:
-        is_candidate_qualified = "." in candidate_name
-        is_requested_qualified = "." in requested_symbol
-        # Match if short names match and at least one is unqualified
-        if not (is_candidate_qualified and is_requested_qualified):
-            return candidate_name.endswith(f".{short_requested}") or requested_symbol.endswith(
-                f".{short_candidate}"
-            )
     return False
 
 
