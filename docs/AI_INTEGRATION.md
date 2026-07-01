@@ -34,7 +34,7 @@ Standard clients handle this automatically. The sequence is:
 1. Client → `initialize` — negotiates protocol version and capabilities
 2. Server → returns `protocolVersion: "2024-11-05"`, `capabilities: {tools: {}}`, `serverInfo`
 3. Client → `notifications/initialized` — server silently acknowledges
-4. Client → `tools/list` — server returns all 9 tool definitions with JSON Schema
+4. Client → `tools/list` — server returns all 10 tool definitions with JSON Schema
 5. Client → `tools/call` — invoke a tool; result is a text content block containing JSON
 
 ## Client Setup
@@ -89,7 +89,7 @@ The client will discover tools automatically via `tools/list`.
 
 ## Available Tools
 
-All 9 tools are discovered automatically by the client. Descriptions and JSON Schema are served via `tools/list`.
+All 10 tools are discovered automatically by the client. Descriptions and JSON Schema are served via `tools/list`.
 
 | Tool | Purpose |
 |------|---------|
@@ -99,6 +99,7 @@ All 9 tools are discovered automatically by the client. Descriptions and JSON Sc
 | `repo.open_file` | Read a line range from a file |
 | `repo.outline` | Get class/function/symbol structure of a file |
 | `repo.references` | Find cross-file usages of a named symbol |
+| `repo.find_definition` | Find where a symbol is declared |
 | `repo.build_context_bundle` | Compact, ranked, cited excerpt set for a coding task |
 | `repo.list_files` | List files under the repository root |
 | `repo.audit_log` | Read sanitized log of all tool calls in this session |

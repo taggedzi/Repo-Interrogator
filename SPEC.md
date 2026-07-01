@@ -326,6 +326,12 @@ Reference record fields:
 * `strategy`: extraction strategy (`ast` or `lexical`)
 * `confidence`: `high`, `medium`, or `low`
 
+Python adapter v2.6+ emits `read` and `write` kinds for bare-name usages that
+are not an import, call, or inheritance base (for example, a function passed
+by name as `key=my_sort_key`, a bare `@decorator` application, or a rebind of
+an existing name). These carry `confidence: low`, since unscoped name
+matching has higher false-positive risk than qualified or call-site matches.
+
 Ordering rules:
 
 * primary: `path` ascending
@@ -645,6 +651,40 @@ Notes:
 * no runtime branch evaluation is performed
 * Python uses AST-first extraction; other languages use lexical fallback in v2.5
 * when `path` is omitted, candidate files are selected using the same deterministic discovery filters as indexing (`index.include_extensions`, `index.exclude_globs`, binary exclusion), then evaluated by language adapters
+
+---
+
+### 11.10 `repo.find_definition` (v2.6)
+
+Inputs:
+
+* `symbol`
+* `path?` (optional path scope)
+* `top_k?` (bounded max definitions)
+
+Returns:
+
+* `symbol`
+* `definitions` list:
+
+  * `path`
+  * `start_line`
+  * `end_line`
+  * `kind`
+  * `signature`
+  * `scope_kind`
+* `truncated` (bool)
+* `total_candidates` (int)
+
+Notes:
+
+* output is deterministic, declaration-based, and uses the same AST
+  (Python) / lexical (other languages) split as `repo.outline`
+* no disambiguation beyond syntax: if a name is declared in multiple
+  places, all matching declarations are returned, sorted `path` ascending
+  then `start_line` ascending
+* when `path` is omitted, candidate files are selected using the same
+  deterministic discovery filters as `repo.references`
 
 ---
 

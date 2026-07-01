@@ -89,6 +89,7 @@ python -m pytest -q
 - `repo.outline`
 - `repo.search`
 - `repo.references`
+- `repo.find_definition`
 - `repo.build_context_bundle`
 - `repo.refresh_index`
 - `repo.audit_log`

@@ -299,6 +299,47 @@ Notes:
 - Python references use AST extraction.
 - TS/JS/Java/Go/Rust/C++/C# use lexical fallback in v2.5.
 
+## `repo.find_definition` (v2.6)
+Return deterministic declaration sites for one symbol.
+
+Params:
+- `symbol` (required)
+- `path` (optional file scope)
+- `top_k` (optional, bounded by reference limits)
+
+Request:
+
+```json
+{
+  "id": "req-def",
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "repo.find_definition",
+    "arguments": {
+      "symbol": "Service.run",
+      "top_k": 10
+    }
+  }
+}
+```
+
+Result fields:
+- `symbol`
+- `definitions`:
+  - `path`
+  - `start_line`
+  - `end_line`
+  - `kind`
+  - `signature`
+  - `scope_kind`
+- `truncated`
+- `total_candidates`
+
+Notes:
+- Use this before `repo.references` when you don't yet know which file declares a symbol.
+- Uses the same AST (Python) / lexical (other languages) split as `repo.outline`.
+
 ## `repo.build_context_bundle`
 Build a deterministic context bundle.
 
