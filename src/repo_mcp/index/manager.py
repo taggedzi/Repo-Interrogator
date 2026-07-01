@@ -191,6 +191,13 @@ class IndexManager:
                 raise SemanticNotAvailableError(
                     f"Semantic model download failed checksum verification: {error}"
                 ) from error
+            except OSError as error:
+                # Covers urllib.error.URLError/HTTPError (network/download failures)
+                # raised by ModelCache._download, without masking bugs in the
+                # semantic_search/reciprocal_rank_fusion logic itself.
+                raise SemanticNotAvailableError(
+                    f"Semantic model download failed: {error}"
+                ) from error
             if mode == "semantic":
                 return semantic_hits
             bm25_hits = bm25_search(documents=filtered, query=query, top_k=top_k)

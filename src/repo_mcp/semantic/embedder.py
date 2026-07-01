@@ -7,8 +7,8 @@ import math
 from repo_mcp.semantic.model_cache import ModelFiles
 
 try:
-    import onnxruntime as ort  # type: ignore[import-not-found]
-    from tokenizers import Tokenizer  # type: ignore[import-not-found]
+    import onnxruntime as ort  # type: ignore[import-not-found,import-untyped,unused-ignore]
+    from tokenizers import Tokenizer  # type: ignore[import-not-found,import-untyped,unused-ignore]
 
     _SEMANTIC_EXTRA_INSTALLED = True
 except ImportError:  # pragma: no cover - exercised only when the extra is absent
