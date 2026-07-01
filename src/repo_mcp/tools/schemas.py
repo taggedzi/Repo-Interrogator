@@ -162,6 +162,14 @@ TOOL_SCHEMAS: dict[str, dict[str, object]] = {
                     "type": "boolean",
                     "description": "Whether to include test files in the bundle.",
                 },
+                "retrieval_mode": {
+                    "type": "string",
+                    "description": (
+                        "Optional retrieval backend: 'bm25' (default), 'semantic' "
+                        "(requires the semantic extra), or 'hybrid' (BM25+semantic via RRF). "
+                        "Independent of 'strategy', which controls multi-query construction."
+                    ),
+                },
             },
             "required": ["prompt", "budget"],
         },

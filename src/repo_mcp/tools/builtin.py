@@ -289,6 +289,21 @@ def _build_context_bundle_handler(
                 message="repo.build_context_bundle include_tests must be a boolean.",
             )
 
+        retrieval_mode = arguments.get("retrieval_mode", "bm25")
+        if not isinstance(retrieval_mode, str):
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.build_context_bundle retrieval_mode must be a string.",
+            )
+        if retrieval_mode not in ("bm25", "semantic", "hybrid"):
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message=(
+                    "repo.build_context_bundle retrieval_mode must be one of: "
+                    "bm25, semantic, hybrid."
+                ),
+            )
+
         max_files = budget.get("max_files")
         max_total_lines = budget.get("max_total_lines")
         if not isinstance(max_files, int) or max_files < 1:
@@ -311,6 +326,7 @@ def _build_context_bundle_handler(
                 },
                 "strategy": strategy,
                 "include_tests": include_tests,
+                "retrieval_mode": retrieval_mode,
             }
         )
 

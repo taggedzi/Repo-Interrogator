@@ -30,7 +30,12 @@ from repo_mcp.bundler.engine import (
     ReferenceLookupScopedManyFn,
 )
 from repo_mcp.config import CliOverrides, ServerConfig, load_effective_config
-from repo_mcp.index import IndexManager, IndexSchemaUnsupportedError, discover_files
+from repo_mcp.index import (
+    IndexManager,
+    IndexSchemaUnsupportedError,
+    SemanticNotAvailableError,
+    discover_files,
+)
 from repo_mcp.logging import AuditEvent, JsonlAuditLogger, sanitize_arguments, utc_timestamp
 from repo_mcp.security import (
     PathBlockedError,
@@ -465,6 +470,20 @@ class StdioServer:
                 message="repo.build_context_bundle include_tests must be boolean.",
             )
 
+        retrieval_mode_value = arguments.get("retrieval_mode", "bm25")
+        if not isinstance(retrieval_mode_value, str) or retrieval_mode_value not in (
+            "bm25",
+            "semantic",
+            "hybrid",
+        ):
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message=(
+                    "repo.build_context_bundle retrieval_mode must be one of: "
+                    "bm25, semantic, hybrid."
+                ),
+            )
+
         reference_lookup_fn = cast(ReferenceLookupFn, self._bundle_reference_lookup())
         reference_lookup_many_fn = cast(
             ReferenceLookupManyFn,
@@ -474,20 +493,34 @@ class StdioServer:
             ReferenceLookupScopedManyFn,
             self._bundle_reference_lookup_many_scoped(),
         )
-        result = build_context_bundle(
-            prompt=prompt,
-            budget=BundleBudget(max_files=max_files, max_total_lines=max_total_lines),
-            search_fn=self._index_manager.search,
-            read_lines_fn=self._read_repo_lines,
-            outline_fn=self._bundle_outline_symbols,
-            reference_lookup_fn=reference_lookup_fn,
-            reference_lookup_many_fn=reference_lookup_many_fn,
-            reference_lookup_scoped_many_fn=reference_lookup_scoped_many_fn,
-            include_tests=include_tests,
-            strategy="hybrid",
-            top_k_per_query=self._limits.max_search_hits,
-            profile_sink=self._write_bundler_profile if self._bundler_profile_enabled else None,
-        )
+
+        def _mode_aware_search(
+            query: str,
+            top_k: int,
+            file_glob: str | None = None,
+            path_prefix: str | None = None,
+        ) -> list[dict[str, object]]:
+            return self._index_manager.search(
+                query, top_k, file_glob, path_prefix, retrieval_mode_value
+            )
+
+        try:
+            result = build_context_bundle(
+                prompt=prompt,
+                budget=BundleBudget(max_files=max_files, max_total_lines=max_total_lines),
+                search_fn=_mode_aware_search,
+                read_lines_fn=self._read_repo_lines,
+                outline_fn=self._bundle_outline_symbols,
+                reference_lookup_fn=reference_lookup_fn,
+                reference_lookup_many_fn=reference_lookup_many_fn,
+                reference_lookup_scoped_many_fn=reference_lookup_scoped_many_fn,
+                include_tests=include_tests,
+                strategy="hybrid",
+                top_k_per_query=self._limits.max_search_hits,
+                profile_sink=self._write_bundler_profile if self._bundler_profile_enabled else None,
+            )
+        except SemanticNotAvailableError as error:
+            raise ToolDispatchError(code="SEMANTIC_NOT_AVAILABLE", message=str(error)) from error
         response = _bundle_result_to_dict(result)
         warnings = self._write_last_bundle_artifacts(response)
         if warnings:
