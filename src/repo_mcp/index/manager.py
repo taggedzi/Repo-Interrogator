@@ -5,6 +5,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import time
+import urllib.error
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -191,10 +192,13 @@ class IndexManager:
                 raise SemanticNotAvailableError(
                     f"Semantic model download failed checksum verification: {error}"
                 ) from error
-            except OSError as error:
-                # Covers urllib.error.URLError/HTTPError (network/download failures)
-                # raised by ModelCache._download, without masking bugs in the
-                # semantic_search/reciprocal_rank_fusion logic itself.
+            except (urllib.error.URLError, TimeoutError) as error:
+                # Narrowly scoped to network/download failures raised by
+                # ModelCache._download (HTTPError is a URLError subclass).
+                # Deliberately does NOT catch bare OSError, which would also
+                # swallow unrelated local file-read errors from
+                # refresh_semantic_index's chunk-text reads and mislabel them
+                # as a download failure.
                 raise SemanticNotAvailableError(
                     f"Semantic model download failed: {error}"
                 ) from error

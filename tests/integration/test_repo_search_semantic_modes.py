@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import urllib.error
 from pathlib import Path
 
 from tests.helpers import call_tool, extract_result, is_tool_error
@@ -48,6 +49,53 @@ def test_repo_status_reports_semantic_not_installed_when_extra_absent(
 
     assert result["semantic_available"] is False
     assert result["semantic_model_status"] == "not_installed"
+
+
+def test_repo_search_semantic_mode_wraps_network_download_failure_as_explicit_error(
+    tmp_path: Path, monkeypatch
+) -> None:
+    (tmp_path / "a.py").write_text("def f():\n    pass\n", encoding="utf-8")
+    server = create_server(repo_root=str(tmp_path))
+    call_tool(server, "req-seed", "repo.refresh_index", {"force": False})
+
+    monkeypatch.setattr(manager_module, "is_semantic_extra_installed", lambda: True)
+
+    def _raise_url_error(self, *, query, top_k, filtered):
+        raise urllib.error.HTTPError(
+            "https://example.invalid/model.onnx", 401, "Unauthorized", {}, None
+        )
+
+    monkeypatch.setattr(manager_module.IndexManager, "_semantic_search_hits", _raise_url_error)
+
+    response = call_tool(
+        server, "req-sem-4", "repo.search", {"query": "f", "mode": "semantic", "top_k": 5}
+    )
+
+    assert is_tool_error(response)
+
+
+def test_repo_search_semantic_mode_does_not_mislabel_unrelated_os_error(
+    tmp_path: Path, monkeypatch
+) -> None:
+    (tmp_path / "a.py").write_text("def f():\n    pass\n", encoding="utf-8")
+    server = create_server(repo_root=str(tmp_path))
+    call_tool(server, "req-seed", "repo.refresh_index", {"force": False})
+    monkeypatch.setattr(manager_module, "is_semantic_extra_installed", lambda: True)
+
+    def _raise_local_os_error(self, *, query, top_k, filtered):
+        raise PermissionError("Permission denied: 'some_local_file.py'")
+
+    monkeypatch.setattr(manager_module.IndexManager, "_semantic_search_hits", _raise_local_os_error)
+
+    index_manager = server._index_manager
+    try:
+        index_manager.search("f", 5, mode="semantic")
+    except manager_module.SemanticNotAvailableError:
+        raise AssertionError(
+            "an unrelated local OSError must not be reclassified as a download failure"
+        ) from None
+    except PermissionError:
+        pass
 
 
 def test_repo_search_hybrid_mode_fuses_results_when_semantic_available(
