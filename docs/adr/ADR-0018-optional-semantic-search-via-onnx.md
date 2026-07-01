@@ -63,3 +63,13 @@ deterministic inputs.
 - The pinned model is deprecated/removed upstream.
 - A demonstrated need arises for a larger or domain-tuned model.
 - RRF proves insufficient and a different fusion method is needed.
+
+### Current Status / Known Limitation
+
+`DEFAULT_MODEL_SPEC` (`src/repo_mcp/semantic/model_cache.py`) currently ships
+as a deliberate placeholder — a fake URL and all-zero checksums — pending a
+maintainer manually resolving a real model commit and computing its real
+checksums (see the 4-step instructions in that file). Until that pin lands,
+`mode="semantic"`/`"hybrid"` will fail with an explicit download error on
+first use rather than silently falling back to BM25, which is correct
+fail-closed behavior but means the feature is not yet functional end-to-end.

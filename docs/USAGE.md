@@ -261,6 +261,13 @@ Hit fields:
 Requires `pip install repo-interrogator[semantic]` and a one-time model
 download (triggered automatically on first `semantic`/`hybrid` call).
 
+> **Known limitation:** the shipped default model spec is currently an
+> unpinned placeholder (fake URL, all-zero checksums), pending a maintainer
+> manually resolving and checksumming a real Hugging Face model commit. Until
+> that happens, every `mode="semantic"`/`"hybrid"` call will fail with an
+> explicit download error — this is correct fail-closed behavior (no silent
+> BM25 fallback), not a working feature yet.
+
 - `repo.search` `mode`: `"bm25"` (default) | `"semantic"` | `"hybrid"`.
 - `repo.build_context_bundle` `retrieval_mode`: same three values, independent
   of `strategy`.
@@ -271,8 +278,8 @@ download (triggered automatically on first `semantic`/`hybrid` call).
 - Requesting `semantic`/`hybrid` without the extra installed returns an
   explicit tool error. If the extra is installed but the model hasn't been
   downloaded yet, the first call automatically triggers a one-time download
-  rather than erroring; only a missing extra or a download-checksum failure
-  returns an error.
+  rather than erroring; only a missing extra, a download failure, or a
+  checksum-verification failure returns an error.
 
 ## `repo.references` (v2.5)
 Return deterministic cross-file references for one symbol.

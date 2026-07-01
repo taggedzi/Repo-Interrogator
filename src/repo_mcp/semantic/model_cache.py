@@ -96,8 +96,10 @@ def _sha256_of_file(path: Path) -> str:
 #   2. Downloading the model + tokenizer files from that exact commit
 #   3. Computing sha256sum on each downloaded file
 #   4. Replacing the values below with the real commit SHA and checksums
-# Until then, ModelCache.ensure_model() using this spec will always raise
-# ModelChecksumError, since no real file will ever match a placeholder hash.
+# Until then, ModelCache.ensure_model() using this spec will always fail: the
+# placeholder URL is not a real Hugging Face resource, so `_download` raises
+# urllib.error.HTTPError (401 Unauthorized) before a file is ever downloaded
+# and checksum verification is reached. It will NOT raise ModelChecksumError.
 DEFAULT_MODEL_SPEC = ModelSpec(
     model_url=(
         "https://huggingface.co/PLACEHOLDER/PLACEHOLDER/resolve/"
