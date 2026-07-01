@@ -90,12 +90,11 @@ def reference_sort_key(reference: SymbolReference) -> tuple[str, int, str, str]:
 def outline_symbol_matches(candidate_name: str, requested_symbol: str) -> bool:
     """Return True when an outline symbol's qualified name matches a requested symbol.
 
-    Mirrors the matching semantics used for cross-file reference lookups: an
-    exact match, or one side being the bare short (last-segment) form of the
-    other (e.g. requesting "run" matches "Service.run", and requesting
-    "Service.run" matches a bare "run" declaration). Two differently-qualified
-    names that merely share the same short name (e.g. "Service.run" vs.
-    "OtherService.run") do not match.
+    Uses matching semantics similar to, but strictly narrower than, cross-file
+    reference lookups: it requires one side to be the exact bare short-name form
+    of the other, and does not match two differently-qualified names that merely
+    share the same short name (e.g. "Service.run" vs. "OtherService.run" do not
+    match, even though both end in ".run").
     """
     if candidate_name == requested_symbol:
         return True
