@@ -7,7 +7,13 @@ from .chunking import (
     chunk_text,
 )
 from .discovery import detect_index_delta, discover_files, record_map
-from .manager import INDEX_SCHEMA_VERSION, IndexManager, IndexSchemaUnsupportedError, IndexStatus
+from .manager import (
+    INDEX_SCHEMA_VERSION,
+    IndexManager,
+    IndexSchemaUnsupportedError,
+    IndexStatus,
+    SemanticNotAvailableError,
+)
 from .models import ChunkRecord, FileRecord, IndexDelta
 from .search import bm25_search, tokenize
 
@@ -21,6 +27,7 @@ __all__ = [
     "IndexSchemaUnsupportedError",
     "IndexStatus",
     "IndexDelta",
+    "SemanticNotAvailableError",
     "build_chunk_id",
     "chunk_text",
     "detect_index_delta",

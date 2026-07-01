@@ -101,6 +101,7 @@ class StdioServer:
             resolve_references=self._resolve_references,
             find_definition=self._find_definition,
             config=self._config,
+            semantic_status=self._index_manager.semantic_status,
         )
         self._reference_profile_enabled = os.getenv(
             "REPO_MCP_PROFILE_REFERENCES", ""

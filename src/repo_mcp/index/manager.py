@@ -14,6 +14,10 @@ from repo_mcp.index.chunking import chunk_text
 from repo_mcp.index.discovery import detect_index_delta, discover_files
 from repo_mcp.index.models import ChunkRecord, FileRecord
 from repo_mcp.index.search import SearchDocument, bm25_search
+from repo_mcp.semantic.embedder import Embedder, is_semantic_extra_installed
+from repo_mcp.semantic.fusion import reciprocal_rank_fusion, semantic_search
+from repo_mcp.semantic.model_cache import DEFAULT_MODEL_SPEC, ModelCache, ModelChecksumError
+from repo_mcp.semantic.vector_store import VectorStore
 
 INDEX_SCHEMA_VERSION = 1
 
@@ -36,6 +40,10 @@ class IndexSchemaUnsupportedError(Exception):
     expected: int
 
 
+class SemanticNotAvailableError(Exception):
+    """Raised when semantic/hybrid search is requested but not available."""
+
+
 class IndexManager:
     """Manages deterministic persistent index files."""
 
@@ -54,6 +62,8 @@ class IndexManager:
         self._filtered_search_docs_cache: dict[
             tuple[str | None, str | None], list[SearchDocument]
         ] = {}
+        self._semantic_model_cache: ModelCache | None = None
+        self._semantic_embedder: Embedder | None = None
 
     def status(self) -> IndexStatus:
         """Return status derived from manifest, if present."""
@@ -154,8 +164,9 @@ class IndexManager:
         top_k: int,
         file_glob: str | None = None,
         path_prefix: str | None = None,
+        mode: str = "bm25",
     ) -> list[dict[str, object]]:
-        """Run deterministic BM25 search over indexed chunks."""
+        """Run deterministic search over indexed chunks in the requested mode."""
         if top_k < 1:
             return []
         filtered = self._load_filtered_search_documents(
@@ -164,7 +175,118 @@ class IndexManager:
         )
         if not filtered:
             return []
-        return bm25_search(documents=filtered, query=query, top_k=top_k)
+        if mode == "bm25":
+            return bm25_search(documents=filtered, query=query, top_k=top_k)
+        if mode in ("semantic", "hybrid"):
+            if not is_semantic_extra_installed():
+                raise SemanticNotAvailableError(
+                    "Semantic/hybrid search requires the 'semantic' extra. "
+                    "Install it with `pip install repo-interrogator[semantic]`."
+                )
+            try:
+                semantic_hits = self._semantic_search_hits(
+                    query=query, top_k=top_k, filtered=filtered
+                )
+            except ModelChecksumError as error:
+                raise SemanticNotAvailableError(
+                    f"Semantic model download failed checksum verification: {error}"
+                ) from error
+            if mode == "semantic":
+                return semantic_hits
+            bm25_hits = bm25_search(documents=filtered, query=query, top_k=top_k)
+            return reciprocal_rank_fusion(bm25_hits, semantic_hits, top_k=top_k)
+        raise ValueError(f"Unsupported search mode: {mode}")
+
+    def semantic_status(self) -> tuple[bool, str]:
+        """Return (semantic_available, semantic_model_status) for repo.status.
+
+        This is purely informational (used by repo.status) and is NOT used to
+        gate repo.search itself: the first semantic/hybrid search call
+        transparently triggers the one-time model download (see
+        _semantic_search_hits -> refresh_semantic_index -> _get_embedder),
+        rather than erroring just because the model isn't cached yet. Only a
+        missing `semantic` extra is a hard block on repo.search (see the
+        `search` method above).
+        """
+        if not is_semantic_extra_installed():
+            return False, "not_installed"
+        model_path, tokenizer_path = self._semantic_model_paths()
+        if not model_path.exists() or not tokenizer_path.exists():
+            return True, "not_downloaded"
+        return True, "ready"
+
+    def _semantic_model_paths(self) -> tuple[Path, Path]:
+        cache_dir = self._data_dir / "models" / DEFAULT_MODEL_SPEC.cache_subdir
+        return cache_dir / "model.onnx", cache_dir / "tokenizer.json"
+
+    def _get_embedder(self) -> Embedder:
+        if self._semantic_embedder is None:
+            if self._semantic_model_cache is None:
+                self._semantic_model_cache = ModelCache(spec=DEFAULT_MODEL_SPEC)
+            files = self._semantic_model_cache.ensure_model(self._data_dir)
+            self._semantic_embedder = Embedder(files)
+        return self._semantic_embedder
+
+    def _embed_query(self, query: str) -> tuple[float, ...]:
+        return self._get_embedder().embed(query)
+
+    def _load_semantic_vectors(self) -> dict[str, tuple[float, ...]]:
+        return VectorStore(data_dir=self._data_dir).load_vectors()
+
+    def _semantic_chunk_metadata(self) -> dict[str, dict[str, object]]:
+        metadata: dict[str, dict[str, object]] = {}
+        for chunk in self._load_chunks():
+            metadata[chunk.chunk_id] = {
+                "path": chunk.path,
+                "start_line": chunk.start_line,
+                "end_line": chunk.end_line,
+                "snippet": "",
+            }
+        return metadata
+
+    def _semantic_search_hits(
+        self, *, query: str, top_k: int, filtered: list[SearchDocument]
+    ) -> list[dict[str, object]]:
+        self.refresh_semantic_index()
+        allowed_paths = {doc.path for doc in filtered}
+        all_vectors = self._load_semantic_vectors()
+        all_metadata = self._semantic_chunk_metadata()
+        scoped_vectors = {
+            chunk_id: vector
+            for chunk_id, vector in all_vectors.items()
+            if all_metadata.get(chunk_id, {}).get("path") in allowed_paths
+        }
+        query_vector = self._embed_query(query)
+        return semantic_search(
+            query_vector=query_vector,
+            chunk_vectors=scoped_vectors,
+            chunk_metadata=all_metadata,
+            top_k=top_k,
+        )
+
+    def refresh_semantic_index(self) -> dict[str, object]:
+        """Compute/refresh embeddings for all current chunks.
+
+        Call explicitly, not from refresh().
+        """
+        embedder = self._get_embedder()
+        chunks = self._load_chunks()
+        store = VectorStore(data_dir=self._data_dir)
+
+        def _read_chunk_text(chunk: ChunkRecord) -> str:
+            path = self._repo_root / chunk.path
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            start_idx = max(0, chunk.start_line - 1)
+            end_idx = min(len(lines), chunk.end_line)
+            return "\n".join(lines[start_idx:end_idx])
+
+        result = store.refresh(chunks, read_chunk_text=_read_chunk_text, embedder=embedder)
+        return {
+            "embedded": result.embedded,
+            "reused": result.reused,
+            "removed": result.removed,
+            "failed": result.failed,
+        }
 
     def _load_search_documents(self) -> list[SearchDocument]:
         marker = self._search_cache_marker()

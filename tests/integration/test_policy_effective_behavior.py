@@ -15,7 +15,7 @@ def test_effective_policy_limits_and_denylist_behavior(tmp_path: Path) -> None:
                 "[limits]",
                 "max_file_bytes = 1024",
                 "max_open_lines = 10",
-                "max_total_bytes_per_response = 2048",
+                "max_total_bytes_per_response = 4096",
                 "max_search_hits = 5",
             ]
         ),

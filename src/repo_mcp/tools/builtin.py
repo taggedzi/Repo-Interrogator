@@ -11,6 +11,7 @@ from repo_mcp.index import (
     DEFAULT_CHUNK_OVERLAP_LINES,
     IndexStatus,
 )
+from repo_mcp.index.manager import SemanticNotAvailableError
 from repo_mcp.security import (
     PolicyBlockedError,
     SecurityLimits,
@@ -39,17 +40,18 @@ def register_builtin_tools(
     list_files: Callable[[dict[str, object]], dict[str, object]],
     refresh_index: Callable[[bool], dict[str, object]],
     read_index_status: Callable[[], IndexStatus],
-    search_index: Callable[[str, int, str | None, str | None], list[dict[str, object]]],
+    search_index: Callable[[str, int, str | None, str | None, str], list[dict[str, object]]],
     outline_path: Callable[[str], dict[str, object]],
     build_context_bundle: Callable[[dict[str, object]], dict[str, object]],
     resolve_references: Callable[[dict[str, object]], dict[str, object]],
     find_definition: Callable[[dict[str, object]], dict[str, object]],
     config: ServerConfig,
+    semantic_status: Callable[[], tuple[bool, str]],
 ) -> None:
     """Register the minimum v1 tool set with deterministic stub behavior."""
     registry.register(
         "repo.status",
-        _status_handler(repo_root, limits, config, read_index_status),
+        _status_handler(repo_root, limits, config, read_index_status, semantic_status),
         _meta("repo.status"),
     )
     registry.register(
@@ -104,18 +106,22 @@ def _status_handler(
     limits: SecurityLimits,
     config: ServerConfig,
     read_index_status: Callable[[], IndexStatus],
+    semantic_status: Callable[[], tuple[bool, str]],
 ) -> ToolHandler:
     def handler(_: dict[str, object]) -> dict[str, object]:
         index_status = read_index_status()
         enabled_adapters: list[str] = []
         if config.adapters.python_enabled:
             enabled_adapters.append("python")
+        semantic_available, semantic_model_status = semantic_status()
         return {
             "repo_root": str(repo_root),
             "index_status": index_status.index_status,
             "last_refresh_timestamp": index_status.last_refresh_timestamp,
             "indexed_file_count": index_status.indexed_file_count,
             "enabled_adapters": enabled_adapters,
+            "semantic_available": semantic_available,
+            "semantic_model_status": semantic_model_status,
             "limits_summary": {
                 "max_file_bytes": limits.max_file_bytes,
                 "max_open_lines": limits.max_open_lines,
@@ -195,7 +201,7 @@ def _open_file_handler(repo_root: Path, limits: SecurityLimits) -> ToolHandler:
 
 def _search_handler(
     limits: SecurityLimits,
-    search_index: Callable[[str, int, str | None, str | None], list[dict[str, object]]],
+    search_index: Callable[[str, int, str | None, str | None, str], list[dict[str, object]]],
 ) -> ToolHandler:
     def handler(arguments: dict[str, object]) -> dict[str, object]:
         mode_value = arguments.get("mode", "bm25")
@@ -203,10 +209,10 @@ def _search_handler(
             raise ToolDispatchError(
                 code="INVALID_PARAMS", message="repo.search mode must be a string."
             )
-        if mode_value != "bm25":
+        if mode_value not in ("bm25", "semantic", "hybrid"):
             raise ToolDispatchError(
                 code="INVALID_PARAMS",
-                message="repo.search mode must be 'bm25' in v1.",
+                message="repo.search mode must be one of: bm25, semantic, hybrid.",
             )
         query_value = arguments.get("query")
         if not isinstance(query_value, str) or not query_value.strip():
@@ -233,12 +239,16 @@ def _search_handler(
         file_glob = file_glob_value if isinstance(file_glob_value, str) else None
         path_prefix_value = arguments.get("path_prefix")
         path_prefix = path_prefix_value if isinstance(path_prefix_value, str) else None
-        hits = search_index(
-            query_value,
-            top_k_value,
-            file_glob,
-            path_prefix,
-        )
+        try:
+            hits = search_index(
+                query_value,
+                top_k_value,
+                file_glob,
+                path_prefix,
+                mode_value,
+            )
+        except SemanticNotAvailableError as error:
+            raise ToolDispatchError(code="SEMANTIC_NOT_AVAILABLE", message=str(error)) from error
         return {"hits": hits}
 
     return handler

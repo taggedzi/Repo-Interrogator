@@ -7,7 +7,9 @@ TOOL_SCHEMAS: dict[str, dict[str, object]] = {
         "name": "repo.status",
         "description": (
             "Return index state, active limits, enabled adapters, and effective config. "
-            "Call this first to verify the server is connected and the index is ready."
+            "Call this first to verify the server is connected and the index is ready. "
+            "Includes semantic_available and semantic_model_status to indicate whether "
+            "semantic/hybrid search is currently usable."
         ),
         "inputSchema": {
             "type": "object",
@@ -96,8 +98,11 @@ TOOL_SCHEMAS: dict[str, dict[str, object]] = {
                 },
                 "mode": {
                     "type": "string",
-                    "enum": ["bm25"],
-                    "description": "Search mode — only 'bm25' is supported in v1.",
+                    "description": (
+                        "Search mode: 'bm25' (default, always available), "
+                        "'semantic' (requires the semantic extra + cached model), "
+                        "or 'hybrid' (BM25+semantic fused via Reciprocal Rank Fusion)."
+                    ),
                 },
                 "top_k": {
                     "type": "integer",
