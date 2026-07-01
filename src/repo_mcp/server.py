@@ -21,6 +21,7 @@ from repo_mcp.adapters.base import (
     SymbolReference,
     normalize_and_sort_references,
     normalize_and_sort_symbols,
+    outline_symbol_matches,
 )
 from repo_mcp.bundler import BundleBudget, BundleResult, build_context_bundle
 from repo_mcp.bundler.engine import (
@@ -98,6 +99,7 @@ class StdioServer:
             outline_path=self._outline_path,
             build_context_bundle=self._build_context_bundle,
             resolve_references=self._resolve_references,
+            find_definition=self._find_definition,
             config=self._config,
         )
         self._reference_profile_enabled = os.getenv(
@@ -548,6 +550,69 @@ class StdioServer:
         return {
             "symbol": symbol,
             "references": [asdict(item) for item in limited],
+            "truncated": len(limited) < total_candidates,
+            "total_candidates": total_candidates,
+        }
+
+    def _find_definition(self, arguments: dict[str, object]) -> dict[str, object]:
+        symbol_value = arguments.get("symbol")
+        if not isinstance(symbol_value, str):
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.find_definition symbol must be a string.",
+            )
+        symbol = symbol_value.strip()
+        if not symbol:
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.find_definition symbol must be a non-empty string.",
+            )
+
+        path_value = arguments.get("path")
+        path_scope = path_value.strip() if isinstance(path_value, str) else None
+
+        top_k_value = arguments.get("top_k", self._limits.max_references)
+        if isinstance(top_k_value, int) and top_k_value > self._limits.max_references:
+            raise PolicyBlockedError(
+                reason="Requested top_k exceeds max_references limit.",
+                hint="Reduce top_k or adjust the configured references limit.",
+            )
+        if not isinstance(top_k_value, int):
+            top_k_value = self._limits.max_references
+        if top_k_value < 1:
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.find_definition top_k must be >= 1.",
+            )
+
+        files = self._reference_source_files(path_scope)
+        matches: list[dict[str, object]] = []
+        for path, text in files:
+            try:
+                adapter = self._adapters.select(path)
+                outline_symbols = normalize_and_sort_symbols(adapter.outline(path, text))
+            except Exception:
+                continue
+            for outline_symbol in outline_symbols:
+                if not outline_symbol_matches(outline_symbol.name, symbol):
+                    continue
+                matches.append(
+                    {
+                        "path": path,
+                        "start_line": outline_symbol.start_line,
+                        "end_line": outline_symbol.end_line,
+                        "kind": outline_symbol.kind,
+                        "signature": outline_symbol.signature,
+                        "scope_kind": outline_symbol.scope_kind,
+                    }
+                )
+
+        matches.sort(key=lambda item: (item["path"], item["start_line"]))
+        total_candidates = len(matches)
+        limited = matches[:top_k_value]
+        return {
+            "symbol": symbol,
+            "definitions": limited,
             "truncated": len(limited) < total_candidates,
             "total_candidates": total_candidates,
         }

@@ -43,6 +43,7 @@ def register_builtin_tools(
     outline_path: Callable[[str], dict[str, object]],
     build_context_bundle: Callable[[dict[str, object]], dict[str, object]],
     resolve_references: Callable[[dict[str, object]], dict[str, object]],
+    find_definition: Callable[[dict[str, object]], dict[str, object]],
     config: ServerConfig,
 ) -> None:
     """Register the minimum v1 tool set with deterministic stub behavior."""
@@ -80,6 +81,11 @@ def register_builtin_tools(
         "repo.references",
         _references_handler(limits, resolve_references),
         _meta("repo.references"),
+    )
+    registry.register(
+        "repo.find_definition",
+        _find_definition_handler(limits, find_definition),
+        _meta("repo.find_definition"),
     )
     registry.register(
         "repo.refresh_index",
@@ -349,6 +355,49 @@ def _references_handler(
         if isinstance(path, str):
             payload["path"] = path.strip()
         return resolve_references(payload)
+
+    return handler
+
+
+def _find_definition_handler(
+    limits: SecurityLimits,
+    find_definition: Callable[[dict[str, object]], dict[str, object]],
+) -> ToolHandler:
+    def handler(arguments: dict[str, object]) -> dict[str, object]:
+        symbol = arguments.get("symbol")
+        path = arguments.get("path")
+        top_k = arguments.get("top_k", limits.max_references)
+
+        if not isinstance(symbol, str) or not symbol.strip():
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.find_definition symbol must be a non-empty string.",
+            )
+        if path is not None and not isinstance(path, str):
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.find_definition path must be a string when provided.",
+            )
+        if isinstance(path, str) and not path.strip():
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.find_definition path must be a non-empty string when provided.",
+            )
+        if isinstance(top_k, int) and top_k > limits.max_references:
+            raise PolicyBlockedError(
+                reason="Requested top_k exceeds max_references limit.",
+                hint="Reduce top_k or adjust the configured references limit.",
+            )
+        if not isinstance(top_k, int) or top_k < 1:
+            raise ToolDispatchError(
+                code="INVALID_PARAMS",
+                message="repo.find_definition top_k must be an integer >= 1.",
+            )
+
+        payload: dict[str, object] = {"symbol": symbol, "top_k": top_k}
+        if isinstance(path, str):
+            payload["path"] = path.strip()
+        return find_definition(payload)
 
     return handler
 

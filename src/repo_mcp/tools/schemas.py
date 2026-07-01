@@ -187,6 +187,35 @@ TOOL_SCHEMAS: dict[str, dict[str, object]] = {
             "required": ["symbol"],
         },
     },
+    "repo.find_definition": {
+        "name": "repo.find_definition",
+        "description": (
+            "Find where a named symbol is declared using AST (Python) or lexical "
+            "outline analysis. Returns file path, line range, kind, and signature "
+            "for each matching declaration. Use this before repo.references when "
+            "you don't yet know which file defines a symbol."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "symbol": {
+                    "type": "string",
+                    "description": (
+                        "Symbol name to find the declaration for (e.g. 'MyClass.my_method')."
+                    ),
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Optional file path to scope the definition search to one file.",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "description": "Maximum number of definitions to return.",
+                },
+            },
+            "required": ["symbol"],
+        },
+    },
     "repo.refresh_index": {
         "name": "repo.refresh_index",
         "description": (
