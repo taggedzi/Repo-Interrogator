@@ -94,6 +94,14 @@ python -m pytest -q
 - `repo.refresh_index`
 - `repo.audit_log`
 
+## Optional Semantic Search
+
+Install the `semantic` extra (`pip install repo-interrogator[semantic]`) to
+enable `mode="semantic"`/`"hybrid"` on `repo.search` and `retrieval_mode` on
+`repo.build_context_bundle`. The core package has zero runtime dependencies
+and is unaffected when this extra isn't installed. See `ADR-0018` and
+`docs/USAGE.md` for details.
+
 ## Language Adapter Support
 
 `repo.outline` currently supports these adapters:

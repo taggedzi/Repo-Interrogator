@@ -104,6 +104,9 @@ All 10 tools are discovered automatically by the client. Descriptions and JSON S
 | `repo.list_files` | List files under the repository root |
 | `repo.audit_log` | Read sanitized log of all tool calls in this session |
 
+`repo.search` and `repo.build_context_bundle` support optional semantic/hybrid
+retrieval modes when the `semantic` install extra is present — see `docs/USAGE.md`.
+
 ## Recommended Workflow for AI Clients
 
 Add this to your system prompt or project instructions:

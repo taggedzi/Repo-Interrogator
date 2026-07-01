@@ -394,6 +394,8 @@ Returns:
 * indexed file count
 * enabled adapters
 * limits summary
+* semantic_available (bool — whether the `semantic` extra is installed)
+* semantic_model_status (`"not_installed"` | `"not_downloaded"` | `"ready"`)
 
 ---
 
@@ -460,7 +462,7 @@ Notes:
 Inputs:
 
 * `query`
-* `mode = "bm25"`
+* `mode` = `"bm25"` (default) | `"semantic"` | `"hybrid"`
 * `top_k`
 * `file_glob?`
 
@@ -473,6 +475,19 @@ Returns:
   * snippet
   * score
   * matched terms
+
+Mode notes:
+
+* `"bm25"` is always available and is the default.
+* `"semantic"` and `"hybrid"` require the optional `semantic` install extra
+  and a cached local embedding model; requesting them without both returns
+  an explicit error, never a silent fallback to `"bm25"`.
+* `"hybrid"` fuses BM25 and semantic rankings via Reciprocal Rank Fusion
+  (RRF): `score = sum(1 / (60 + rank))` over each ranked list a candidate
+  appears in (1-based rank, candidates absent from a list contribute 0 for
+  it). This is rank-based, not a weighted sum of raw scores, so no score
+  normalization scheme is required and the fusion stays well-defined as the
+  corpus changes. See `ADR-0018`.
 
 ---
 
@@ -503,6 +518,9 @@ Inputs:
   * `max_total_lines`
 * `strategy = "hybrid"`
 * `include_tests`
+* `retrieval_mode?` = `"bm25"` (default) | `"semantic"` | `"hybrid"` — independent
+  of `strategy`; `strategy` controls multi-query construction, `retrieval_mode`
+  controls the search backend (see §11.5).
 
 Outputs:
 

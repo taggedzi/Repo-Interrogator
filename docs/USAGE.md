@@ -256,6 +256,21 @@ Hit fields:
 - `score`
 - `matched_terms`
 
+## Semantic / Hybrid Search (optional)
+
+Requires `pip install repo-interrogator[semantic]` and a one-time model
+download (triggered automatically on first `semantic`/`hybrid` call).
+
+- `repo.search` `mode`: `"bm25"` (default) | `"semantic"` | `"hybrid"`.
+- `repo.build_context_bundle` `retrieval_mode`: same three values, independent
+  of `strategy`.
+- `repo.status` reports `semantic_available` and `semantic_model_status` so a
+  client can check before attempting semantic mode.
+- `"hybrid"` uses Reciprocal Rank Fusion over BM25 and semantic rank
+  positions — see `SPEC.md` §11.5 for the exact formula.
+- Requesting `semantic`/`hybrid` without the extra installed, or before the
+  model has finished its first download, returns an explicit tool error.
+
 ## `repo.references` (v2.5)
 Return deterministic cross-file references for one symbol.
 
