@@ -291,6 +291,7 @@ class _PythonReferenceCollector(ast.NodeVisitor):
 
     def __init__(self) -> None:
         self.candidates: list[tuple[int, str, str, str, str]] = []
+        self._suppressed_name_ids: set[int] = set()
 
     def visit_Import(self, node: ast.Import) -> None:  # noqa: N802
         for alias in node.names:
@@ -316,6 +317,8 @@ class _PythonReferenceCollector(ast.NodeVisitor):
                 continue
             evidence = f"class {node.name}({dotted})"
             self.candidates.append((node.lineno, dotted, "inheritance", evidence, "high"))
+            if isinstance(base, ast.Name):
+                self._suppressed_name_ids.add(id(base))
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
@@ -326,7 +329,19 @@ class _PythonReferenceCollector(ast.NodeVisitor):
             confidence = "high" if "." in dotted else "medium"
             evidence = f"{dotted}()"
             self.candidates.append((node.lineno, dotted, kind, evidence, confidence))
+            if isinstance(node.func, ast.Name):
+                self._suppressed_name_ids.add(id(node.func))
         self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:  # noqa: N802
+        if id(node) in self._suppressed_name_ids:
+            return
+        if isinstance(node.ctx, ast.Load):
+            evidence = node.id
+            self.candidates.append((node.lineno, node.id, "read", evidence, "low"))
+        elif isinstance(node.ctx, ast.Store):
+            evidence = f"{node.id} = ..."
+            self.candidates.append((node.lineno, node.id, "write", evidence, "low"))
 
 
 def _match_references(

@@ -146,3 +146,118 @@ def call() -> int:
     assert first
     assert second
     assert parse_calls == 1
+
+
+def test_python_references_captures_bare_name_passed_as_keyword_argument() -> None:
+    files = [
+        (
+            "src/engine.py",
+            """
+def _rank_sort_key(hit):
+    return hit
+
+
+def build():
+    return sorted([], key=_rank_sort_key)
+""",
+        ),
+    ]
+
+    adapter = PythonAstAdapter()
+    references = adapter.references_for_symbol("_rank_sort_key", files)
+
+    assert [(item.path, item.line, item.kind, item.confidence) for item in references] == [
+        ("src/engine.py", 7, "read", "low"),
+    ]
+
+
+def test_python_references_captures_write_reference_on_rebind() -> None:
+    files = [
+        (
+            "src/handlers.py",
+            """
+def real_func():
+    pass
+
+
+real_func = decorate(real_func)
+""",
+        ),
+    ]
+
+    adapter = PythonAstAdapter()
+    references = adapter.references_for_symbol("real_func", files)
+
+    assert [(item.path, item.line, item.kind, item.confidence) for item in references] == [
+        ("src/handlers.py", 6, "read", "low"),
+        ("src/handlers.py", 6, "write", "low"),
+    ]
+
+
+def test_python_references_does_not_duplicate_call_target_as_read() -> None:
+    files = [
+        (
+            "src/service.py",
+            """
+class Service:
+    pass
+
+
+Service()
+""",
+        ),
+    ]
+
+    adapter = PythonAstAdapter()
+    references = adapter.references_for_symbol("Service", files)
+
+    assert [(item.path, item.line, item.kind) for item in references] == [
+        ("src/service.py", 6, "instantiation"),
+    ]
+
+
+def test_python_references_does_not_duplicate_inheritance_base_as_read() -> None:
+    files = [
+        (
+            "src/models.py",
+            """
+class Base:
+    pass
+
+
+class Sub(Base):
+    pass
+""",
+        ),
+    ]
+
+    adapter = PythonAstAdapter()
+    references = adapter.references_for_symbol("Base", files)
+
+    assert [(item.path, item.line, item.kind) for item in references] == [
+        ("src/models.py", 6, "inheritance"),
+    ]
+
+
+def test_python_references_captures_bare_decorator_application() -> None:
+    files = [
+        (
+            "src/decorators.py",
+            """
+def my_decorator(fn):
+    return fn
+
+
+@my_decorator
+def handler():
+    pass
+""",
+        ),
+    ]
+
+    adapter = PythonAstAdapter()
+    references = adapter.references_for_symbol("my_decorator", files)
+
+    assert [(item.path, item.line, item.kind, item.confidence) for item in references] == [
+        ("src/decorators.py", 6, "read", "low"),
+    ]
