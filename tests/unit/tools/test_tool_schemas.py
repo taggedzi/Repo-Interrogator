@@ -13,6 +13,7 @@ EXPECTED_TOOLS = [
     "repo.search",
     "repo.build_context_bundle",
     "repo.references",
+    "repo.find_definition",
     "repo.refresh_index",
     "repo.audit_log",
 ]

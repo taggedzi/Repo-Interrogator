@@ -15,6 +15,7 @@ EXPECTED_TOOLS = [
     "repo.search",
     "repo.build_context_bundle",
     "repo.references",
+    "repo.find_definition",
     "repo.refresh_index",
     "repo.audit_log",
 ]
@@ -130,7 +131,7 @@ def test_full_mcp_handshake_and_tool_call() -> None:
     assert init_resp["id"] == 1
     assert init_resp["result"]["protocolVersion"] == "2024-11-05"
     assert list_resp["id"] == 2
-    assert len(list_resp["result"]["tools"]) == 9
+    assert len(list_resp["result"]["tools"]) == 10
     assert call_resp["id"] == 3
     assert not call_resp["result"].get("isError")
 

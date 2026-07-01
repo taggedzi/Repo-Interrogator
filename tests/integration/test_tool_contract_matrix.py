@@ -28,6 +28,7 @@ def test_tool_contract_matrix_for_required_v1_tools(tmp_path: Path) -> None:
         ("repo.search", {"query": "search", "mode": "bm25", "top_k": 5}),
         ("repo.outline", {"path": "src/main.py"}),
         ("repo.references", {"symbol": "Main.run", "top_k": 5}),
+        ("repo.find_definition", {"symbol": "Main.run", "top_k": 5}),
         (
             "repo.build_context_bundle",
             {
@@ -93,6 +94,13 @@ def test_tool_contract_matrix_for_required_v1_tools(tmp_path: Path) -> None:
             assert set(result.keys()) == {
                 "symbol",
                 "references",
+                "truncated",
+                "total_candidates",
+            }
+        if tool_name == "repo.find_definition":
+            assert set(result.keys()) == {
+                "symbol",
+                "definitions",
                 "truncated",
                 "total_candidates",
             }
